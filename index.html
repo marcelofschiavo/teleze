@@ -318,13 +318,90 @@
         let wakeLock = null;
 
         // ===== Sincronização com a nuvem (JSONBin.io) =====
+        // Estratégia: bin "manifesto" guarda só { chunkIds: [...] }.
+        // O acervo em si é fatiado em N bins de dados (cada um < LIMITE_BYTES),
+        // criados/apagados automaticamente conforme o acervo cresce/encolhe.
+        // cloudConfig = { manifestId, apiKey }
+        const LIMITE_BYTES = 90 * 1024; // margem de segurança abaixo do teto de 100kb do plano grátis
+
         function statusMsg(texto, cor) {
             syncStatus.textContent = texto;
             syncStatus.style.color = cor || '#666';
         }
 
+        function tamanhoBytes(obj) {
+            return new TextEncoder().encode(JSON.stringify(obj)).length;
+        }
+
+        // Agrupa as cifras em pedaços, cada um abaixo de LIMITE_BYTES
+        function fatiarBanco(lista) {
+            const chunks = [];
+            let atual = [];
+            let atualBytes = 2; // "[]"
+            for (const cifra of lista) {
+                const tamCifra = tamanhoBytes(cifra) + 1; // +1 da vírgula
+                if (atual.length > 0 && atualBytes + tamCifra > LIMITE_BYTES) {
+                    chunks.push(atual);
+                    atual = [];
+                    atualBytes = 2;
+                }
+                atual.push(cifra);
+                atualBytes += tamCifra;
+            }
+            if (atual.length > 0) chunks.push(atual);
+            return chunks;
+        }
+
+        async function jsonbinGet(id, apiKey) {
+            const resp = await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`, {
+                headers: { 'X-Master-Key': apiKey }
+            });
+            if (!resp.ok) throw new Error('Falha ao buscar bin ' + id + ': ' + resp.status);
+            const data = await resp.json();
+            return data.record;
+        }
+
+        async function jsonbinPut(id, apiKey, dados) {
+            const resp = await fetch(`https://api.jsonbin.io/v3/b/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': apiKey },
+                body: JSON.stringify(dados)
+            });
+            if (!resp.ok) {
+                const corpo = await resp.text().catch(() => '');
+                throw new Error('Falha ao salvar bin ' + id + ': ' + resp.status + ' ' + corpo);
+            }
+        }
+
+        async function jsonbinCreate(apiKey, dados, nome) {
+            const resp = await fetch('https://api.jsonbin.io/v3/b', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': apiKey,
+                    'X-Bin-Name': nome || 'telezen-chunk'
+                },
+                body: JSON.stringify(dados)
+            });
+            if (!resp.ok) {
+                const corpo = await resp.text().catch(() => '');
+                throw new Error('Falha ao criar bin: ' + resp.status + ' ' + corpo);
+            }
+            const data = await resp.json();
+            return data.metadata.id;
+        }
+
+        async function jsonbinDelete(id, apiKey) {
+            try {
+                await fetch(`https://api.jsonbin.io/v3/b/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Master-Key': apiKey }
+                });
+            } catch (e) { /* se falhar, fica órfão na conta, sem problema */ }
+        }
+
         async function carregarNuvem() {
-            if (!cloudConfig || !cloudConfig.binId || !cloudConfig.apiKey) {
+            if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) {
                 statusMsg('☁️ Nuvem não configurada — usando apenas cópia local. Clique em "⚙️ Nuvem" pra ativar sincronização automática.', '#e0a800');
                 // primeira vez sem nada salvo: tenta puxar um repertorio.json estático, se existir
                 if (banco.length === 0) {
@@ -344,20 +421,18 @@
             }
             statusMsg('⏳ Sincronizando...', '#aaa');
             try {
-                const resp = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.binId}/latest`, {
-                    headers: { 'X-Master-Key': cloudConfig.apiKey }
-                });
-                if (!resp.ok) throw new Error('Falha ao buscar da nuvem');
-                const data = await resp.json();
-                const dados = data.record;
-                if (Array.isArray(dados)) {
-                    banco = dados;
-                    localStorage.setItem('bancoCache', JSON.stringify(banco));
-                    statusMsg('☁️ Sincronizado', '#28a745');
-                } else {
-                    throw new Error('Formato inesperado');
+                const manifesto = await jsonbinGet(cloudConfig.manifestId, cloudConfig.apiKey);
+                const chunkIds = (manifesto && Array.isArray(manifesto.chunkIds)) ? manifesto.chunkIds : [];
+                let dados = [];
+                for (const id of chunkIds) {
+                    const pedaco = await jsonbinGet(id, cloudConfig.apiKey);
+                    if (Array.isArray(pedaco)) dados = dados.concat(pedaco);
                 }
+                banco = dados;
+                localStorage.setItem('bancoCache', JSON.stringify(banco));
+                statusMsg('☁️ Sincronizado (' + chunkIds.length + ' pedaço(s))', '#28a745');
             } catch (e) {
+                console.error('carregarNuvem erro:', e);
                 statusMsg('⚠️ Sem conexão com a nuvem — mostrando última cópia salva neste aparelho', '#dc3545');
             }
             renderizarLista();
@@ -365,46 +440,53 @@
 
         async function salvarNuvem() {
             localStorage.setItem('bancoCache', JSON.stringify(banco));
-            if (!cloudConfig || !cloudConfig.binId || !cloudConfig.apiKey) return;
+            if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) return;
             statusMsg('⏳ Salvando na nuvem...', '#aaa');
             try {
-                const resp = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.binId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Key': cloudConfig.apiKey
-                    },
-                    body: JSON.stringify(banco)
-                });
-                if (!resp.ok) {
-    const corpoErro = await resp.text();
-    console.error('jsonbin PUT falhou:', resp.status, resp.statusText, corpoErro);
-    throw new Error('Falha ao salvar');
-}
-statusMsg('☁️ Sincronizado', '#28a745');
-} catch (e) {
-    console.error('salvarNuvem erro:', e);
-    statusMsg('⚠️ Não foi possível salvar na nuvem agora (salvo só neste aparelho por enquanto)', '#dc3545');
-}
+                const manifesto = await jsonbinGet(cloudConfig.manifestId, cloudConfig.apiKey);
+                let chunkIdsAntigos = (manifesto && Array.isArray(manifesto.chunkIds)) ? manifesto.chunkIds : [];
+                const novosChunks = fatiarBanco(banco);
+
+                const novosIds = [];
+                for (let i = 0; i < novosChunks.length; i++) {
+                    if (i < chunkIdsAntigos.length) {
+                        await jsonbinPut(chunkIdsAntigos[i], cloudConfig.apiKey, novosChunks[i]);
+                        novosIds.push(chunkIdsAntigos[i]);
+                    } else {
+                        const novoId = await jsonbinCreate(cloudConfig.apiKey, novosChunks[i], 'telezen-chunk-' + i);
+                        novosIds.push(novoId);
+                    }
+                }
+                // apaga bins de pedaço que sobraram (acervo encolheu)
+                for (let i = novosChunks.length; i < chunkIdsAntigos.length; i++) {
+                    await jsonbinDelete(chunkIdsAntigos[i], cloudConfig.apiKey);
+                }
+
+                await jsonbinPut(cloudConfig.manifestId, cloudConfig.apiKey, { chunkIds: novosIds });
+                statusMsg('☁️ Sincronizado (' + novosIds.length + ' pedaço(s))', '#28a745');
+            } catch (e) {
+                console.error('salvarNuvem erro:', e);
+                statusMsg('⚠️ Não foi possível salvar na nuvem agora (salvo só neste aparelho por enquanto)', '#dc3545');
+            }
         }
 
         btnConfigNuvem.addEventListener('click', () => {
-            const binIdAtual = cloudConfig ? cloudConfig.binId : '';
+            const manifestIdAtual = cloudConfig ? cloudConfig.manifestId : '';
             const apiKeyAtual = cloudConfig ? cloudConfig.apiKey : '';
-            const binId = prompt(
-                'Cole o Bin ID do jsonbin.io (crie uma conta grátis em jsonbin.io, faça um Bin novo com conteúdo [] e copie o ID):',
-                binIdAtual
+            const manifestId = prompt(
+                'Cole o Bin ID do bin MANIFESTO no jsonbin.io (crie uma conta grátis em jsonbin.io, faça UM Bin novo com conteúdo {"chunkIds":[]} e copie o ID — os demais bins de dados são criados automaticamente):',
+                manifestIdAtual
             );
-            if (binId === null) return;
+            if (manifestId === null) return;
             const apiKey = prompt('Cole sua X-Master-Key do jsonbin.io (em "API Keys" no painel):', apiKeyAtual);
             if (apiKey === null) return;
-            if (!binId.trim() || !apiKey.trim()) {
+            if (!manifestId.trim() || !apiKey.trim()) {
                 cloudConfig = null;
                 localStorage.removeItem('cloudConfig');
                 statusMsg('☁️ Nuvem desativada', '#666');
                 return;
             }
-            cloudConfig = { binId: binId.trim(), apiKey: apiKey.trim() };
+            cloudConfig = { manifestId: manifestId.trim(), apiKey: apiKey.trim() };
             localStorage.setItem('cloudConfig', JSON.stringify(cloudConfig));
             if (confirm('Configuração salva. Deseja enviar seu acervo atual (' + banco.length + ' cifra(s)) pra nuvem agora, sobrescrevendo o que estiver lá?')) {
                 salvarNuvem();
