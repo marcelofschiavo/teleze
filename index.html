@@ -924,7 +924,10 @@ fileInputLote.addEventListener('change', (e) => {
 
         async function jsonbinGet(id, apiKey) {
             const resp = await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`, {
-                headers: { 'X-Master-Key': apiKey }
+                headers: {
+                    'X-Master-Key': apiKey,
+                    'X-Access-Key': apiKey
+                }
             });
             if (!resp.ok) throw new Error('Falha ao buscar bin ' + id + ': ' + resp.status);
             const data = await resp.json();
