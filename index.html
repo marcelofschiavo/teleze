@@ -376,11 +376,16 @@
                     },
                     body: JSON.stringify(banco)
                 });
-                if (!resp.ok) throw new Error('Falha ao salvar');
-                statusMsg('☁️ Sincronizado', '#28a745');
-            } catch (e) {
-                statusMsg('⚠️ Não foi possível salvar na nuvem agora (salvo só neste aparelho por enquanto)', '#dc3545');
-            }
+                if (!resp.ok) {
+    const corpoErro = await resp.text();
+    console.error('jsonbin PUT falhou:', resp.status, resp.statusText, corpoErro);
+    throw new Error('Falha ao salvar');
+}
+statusMsg('☁️ Sincronizado', '#28a745');
+} catch (e) {
+    console.error('salvarNuvem erro:', e);
+    statusMsg('⚠️ Não foi possível salvar na nuvem agora (salvo só neste aparelho por enquanto)', '#dc3545');
+}
         }
 
         btnConfigNuvem.addEventListener('click', () => {
