@@ -719,8 +719,6 @@
             if (!isAdmin) editorArea.style.display = 'none';
         }
         
-        // Chame isso logo após o carregamento da página
-        atualizarUIModoAdmin();
 
         const content = document.getElementById('content');
         const editorArea = document.getElementById('editorArea');
@@ -765,6 +763,10 @@
         const tapFlash = document.getElementById('tapFlash');
         const wakeStatus = document.getElementById('wakeStatus');
 
+
+        // Chame isso logo após o carregamento da página
+        atualizarUIModoAdmin();
+        
         let isPlaying = false;
         let animationId;
         let wakeLock = null;
