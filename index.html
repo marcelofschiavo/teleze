@@ -720,12 +720,32 @@
         });
 
         // ===== Auto-scroll =====
-        function scrollPage() {
-            if (isPlaying) {
-                const velocidade = speedInput.value * 0.05;
-                window.scrollBy(0, velocidade);
-                animationId = requestAnimationFrame(scrollPage);
+        // OBS: scrollBy arredonda valores fracionários de px em muitos navegadores,
+        // então usamos acumulador baseado em tempo real (não em contagem de frames)
+        // pra ter velocidade suave e consistente, com controle fino no mínimo.
+        let ultimoTimestamp = null;
+        let pxAcumulado = 0;
+
+        function pxPorSegundo(valorSlider) {
+            // escala: 3px/s (bem devagar) até 220px/s (rápido), curva suave
+            const min = 3, max = 220;
+            const t = (valorSlider - 1) / 99; // normaliza 1..100 -> 0..1
+            return min + (max - min) * Math.pow(t, 1.6);
+        }
+
+        function scrollPage(timestamp) {
+            if (!isPlaying) return;
+            if (ultimoTimestamp === null) ultimoTimestamp = timestamp;
+            const deltaSegundos = (timestamp - ultimoTimestamp) / 1000;
+            ultimoTimestamp = timestamp;
+
+            pxAcumulado += pxPorSegundo(speedInput.value) * deltaSegundos;
+            const inteiro = Math.floor(pxAcumulado);
+            if (inteiro >= 1) {
+                window.scrollBy(0, inteiro);
+                pxAcumulado -= inteiro;
             }
+            animationId = requestAnimationFrame(scrollPage);
         }
 
         async function ativarWakeLock() {
@@ -764,7 +784,9 @@
             if (isPlaying) {
                 toggleBtn.textContent = 'Pausar';
                 toggleBtn.style.backgroundColor = '#dc3545';
-                scrollPage();
+                ultimoTimestamp = null;
+                pxAcumulado = 0;
+                animationId = requestAnimationFrame(scrollPage);
                 ativarWakeLock();
             } else {
                 toggleBtn.textContent = 'Iniciar';
