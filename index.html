@@ -960,6 +960,18 @@ fileInputLote.addEventListener('change', (e) => {
         }
 
         btnConfigNuvem.addEventListener('click', () => {
+            // --- PROTEÇÃO POR SENHA ---
+            const senhaCorreta = "1234"; // Defina a sua senha aqui!
+            const senhaDigitada = prompt("🔒 Área restrita de infraestrutura.\nDigite a senha de administrador:");
+            
+            if (senhaDigitada !== senhaCorreta) {
+                if (senhaDigitada !== null) { // Se não foi o botão de "Cancelar"
+                    alert("❌ Senha incorreta.");
+                }
+                return; // Aborta e não mostra as opções de API
+            }
+            // --------------------------
+
             const manifestIdAtual = cloudConfig ? cloudConfig.manifestId : '';
             const apiKeyAtual = cloudConfig ? cloudConfig.apiKey : '';
             const manifestId = prompt(
