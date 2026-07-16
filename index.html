@@ -698,7 +698,7 @@
 
             // 1) Aberto (se existir formato exato pra essa nota+sufixo)
             if (OPEN_SHAPES[nomeCompleto]) {
-                variacoes.push({ tipo: 'Aberto', frets: OPEN_SHAPES[nomeCompleto], start: 0, aproximado: false });
+                variacoes.push({ tipo: 'Aberto', frets: OPEN_SHAPES[nomeCompleto], start: 0, aproximado: false, raiz: nota });
             }
 
             let idx = NOTAS_SUSTENIDO.indexOf(nota);
@@ -709,19 +709,20 @@
             const fretE = (idx - 4 + 12) % 12;
             const shapeE = BARRE_E[qualidadeReal];
             const fretsE = shapeE.map(rel => rel < 0 ? -1 : fretE + rel);
-            variacoes.push({ tipo: fretE === 0 ? 'Aberto (E)' : 'Pestana (base E)', frets: fretsE, start: fretE, aproximado });
+            variacoes.push({ tipo: fretE === 0 ? 'Aberto (E)' : 'Pestana (base E)', frets: fretsE, start: fretE, aproximado, raiz: nota });
 
             // 3) Pestana com base no formato de A
             const fretA = (idx - 9 + 12) % 12;
             const shapeA = BARRE_A[qualidadeReal];
             const fretsA = shapeA.map(rel => rel < 0 ? -1 : fretA + rel);
-            variacoes.push({ tipo: fretA === 0 ? 'Aberto (A)' : 'Pestana (base A)', frets: fretsA, start: fretA, aproximado });
+            variacoes.push({ tipo: fretA === 0 ? 'Aberto (A)' : 'Pestana (base A)', frets: fretsA, start: fretA, aproximado, raiz: nota });
 
             return variacoes;
         }
 
         function gerarSVGAcorde(variacao) {
-            const { frets, start, aproximado } = variacao;
+            const { frets, start, aproximado, raiz } = variacao;
+            const raizPc = indiceNota(raiz);
             const numFrets = 4;
             const w = 120, h = 150, margin = 20;
             const stringGap = (w - 2 * margin) / 5;
@@ -758,22 +759,27 @@
                     return;
                 }
                 const nota = notaDaCorda(sIdx, fretAbs);
+                const notaPc = indiceNota(nota);
+                const funcaoNota = (raizPc !== -1 && notaPc !== -1) ? FUNCOES_INTERVALO[(notaPc - raizPc + 12) % 12] : '';
+
                 if (start === 0 && fretAbs === 0) {
                     // corda solta
-                    svg += `<circle cx="${x}" cy="${margin - 9}" r="8" fill="none" stroke="#28a745" stroke-width="1.5"/>`;
-                    svg += `<text x="${x}" y="${margin - 6}" font-size="8" fill="#28a745" text-anchor="middle">${nota}</text>`;
+                    svg += `<circle cx="${x}" cy="${margin - 11}" r="9" fill="none" stroke="#28a745" stroke-width="1.5"/>`;
+                    svg += `<text x="${x}" y="${margin - 13}" font-size="7" fill="#28a745" text-anchor="middle" font-weight="bold">${nota}</text>`;
+                    svg += `<text x="${x}" y="${margin - 4}" font-size="6" fill="#28a745" text-anchor="middle">${funcaoNota}</text>`;
                     return;
                 }
                 if (temBarra && fretAbs === start) {
-                    // coberta pela pestana - mostra só o nome da nota sobre a barra
+                    // coberta pela pestana - mostra nome da nota + função sobre a barra
                     const yB = margin + fretGap * 0.5;
-                    svg += `<text x="${x}" y="${yB + 3}" font-size="8" fill="#3a2a00" text-anchor="middle" font-weight="bold">${nota}</text>`;
+                    svg += `<text x="${x}" y="${yB + 3}" font-size="7" fill="#3a2a00" text-anchor="middle" font-weight="bold">${nota}<tspan font-size="5" dx="1">${funcaoNota}</tspan></text>`;
                     return;
                 }
                 const relPos = fretAbs - start;
                 const y = margin + (relPos - 0.5) * fretGap;
-                svg += `<circle cx="${x}" cy="${y}" r="8" fill="#ffb300"/>`;
-                svg += `<text x="${x}" y="${y + 3}" font-size="8" fill="#2a1e00" text-anchor="middle" font-weight="bold">${nota}</text>`;
+                svg += `<circle cx="${x}" cy="${y}" r="9" fill="#ffb300"/>`;
+                svg += `<text x="${x}" y="${y - 1}" font-size="7" fill="#2a1e00" text-anchor="middle" font-weight="bold">${nota}</text>`;
+                svg += `<text x="${x}" y="${y + 7}" font-size="6" fill="#2a1e00" text-anchor="middle">${funcaoNota}</text>`;
             });
 
             svg += `</svg>`;
@@ -794,6 +800,20 @@
                 });
             });
             return encontrados;
+        }
+
+        // Conta TODAS as ocorrências de cada acorde (não só as únicas) — usado na detecção de tom,
+        // já que acordes mais frequentes (tônica, dominante) pesam mais na identificação do tom.
+        function contarOcorrenciasAcordes(texto) {
+            const linhas = texto.split('\n');
+            const contagem = {};
+            linhas.forEach(linha => {
+                if (!ehLinhaDeAcordes(linha)) return;
+                linha.trim().split(/\s+/).forEach(tok => {
+                    contagem[tok] = (contagem[tok] || 0) + 1;
+                });
+            });
+            return contagem;
         }
 
         // Guarda qual variação está sendo exibida por acorde (persiste enquanto o painel está aberto)
@@ -817,20 +837,66 @@
             return FUNCOES_INTERVALO[semitons];
         }
 
-        // Tom escolhido por música (persistido por título da cifra)
+        // ===== Detecção automática de tom a partir dos próprios acordes =====
+        // Graus diatônicos esperados (qualidade) por semitom de distância da tônica.
+        const DIATONICO_MAIOR = { 0: 'maj', 2: 'min', 4: 'min', 5: 'maj', 7: 'maj', 9: 'min', 11: 'dim' };
+        const DIATONICO_MENOR = { 0: 'min', 2: 'dim', 3: 'maj', 5: 'min', 7: 'maj', 8: 'maj', 10: 'maj' };
+        // (V do tom menor aceita maior OU menor, pois é comum usar a dominante maior — menor harmônica/melódica)
+
+        function classificarQualidade(sufixo) {
+            if (/^dim/.test(sufixo)) return 'dim';
+            if (/^aug/.test(sufixo)) return 'aug';
+            if (/^m(?!aj)/.test(sufixo)) return 'min';
+            return 'maj'; // cobre '', '7', 'maj7', 'sus4', 'add9' etc.
+        }
+
+        function detectarTom(texto) {
+            const contagem = contarOcorrenciasAcordes(texto);
+            const entradas = Object.entries(contagem)
+                .map(([tok, count]) => {
+                    const info = parseChordFull(tok);
+                    if (!info) return null;
+                    const rootPc = indiceNota(info.nota);
+                    if (rootPc === -1) return null;
+                    return { rootPc, qualidade: classificarQualidade(info.sufixo), count };
+                })
+                .filter(Boolean);
+
+            if (entradas.length === 0) return 'C';
+
+            let melhorScore = -1;
+            let melhorTom = 'C';
+            for (let tomPc = 0; tomPc < 12; tomPc++) {
+                for (const modo of ['maior', 'menor']) {
+                    const mapa = modo === 'maior' ? DIATONICO_MAIOR : DIATONICO_MENOR;
+                    let score = 0;
+                    entradas.forEach(({ rootPc, qualidade, count }) => {
+                        const offset = (rootPc - tomPc + 12) % 12;
+                        const esperada = mapa[offset];
+                        if (!esperada) return; // acorde fora da escala nesse tom candidato
+                        if (esperada === qualidade) {
+                            score += count;
+                        } else if (modo === 'menor' && offset === 7 && qualidade === 'min') {
+                            // V menor (natural) também conta, com peso levemente menor que o V maior
+                            score += count * 0.8;
+                        }
+                    });
+                    if (score > melhorScore) {
+                        melhorScore = score;
+                        melhorTom = NOTAS_SUSTENIDO[tomPc];
+                    }
+                }
+            }
+            return melhorTom;
+        }
+
+        // Tom escolhido por música (persistido por título da cifra) — sobrepõe a detecção automática
         let tonsEscolhidos = JSON.parse(localStorage.getItem('tonsEscolhidos') || '{}');
 
         function obterTomAtual(cifra, tokens, semitons) {
             const titulo = cifra.titulo;
-            if (tonsEscolhidos[titulo]) return tonsEscolhidos[titulo];
-            // sem escolha salva: chuta o primeiro acorde detectado (já transposto) como tônica
-            if (tokens.length > 0) {
-                const info = parseChordFull(tokens[0]);
-                if (info) {
-                    return semitons !== 0 ? transporChord(info.nota, semitons) : info.nota;
-                }
-            }
-            return 'C';
+            const tomBase = tonsEscolhidos[titulo] || detectarTom(cifra.texto);
+            return semitons !== 0 ? transporChord(tomBase, semitons) : tomBase;
         }
 
         function renderizarPainelAcordes(texto, semitons) {
