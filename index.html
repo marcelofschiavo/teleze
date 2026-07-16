@@ -1170,7 +1170,7 @@ fileInputLote.addEventListener('change', (e) => {
             // a cifras formatadas de forma "bagunçada" na internet.
             return validos.length / tokens.length >= 0.7;
         }
-        
+
         // ===== Detecção e ocultação de blocos de tablatura (diagramas de traste) =====
         function ehLinhaDeTablatura(linha) {
             const t = linha.trim();
@@ -1806,6 +1806,21 @@ fileInputLote.addEventListener('change', (e) => {
             let linhasOriginais = texto.split('\n');
             linhasOriginais = prepararLinhasComTablatura(linhasOriginais);
             
+            // --- NOVO: Limpeza pesada para o modo Só Letra ---
+            if (mostrarSoLetra) {
+                linhasOriginais = linhasOriginais.filter(l => {
+                    const txt = l.trim().toLowerCase();
+                    // 1. Remove o ícone de guitarra gerado pelo nosso próprio sistema
+                    if (txt.startsWith('🎸') || txt.includes('suprimida]')) return false;
+                    // 2. Remove cabeçalhos inúteis originais do CifraClub (ex: [Tab - Solo], [Tablaturas])
+                    if (txt.startsWith('[tab') && txt.endsWith(']')) return false;
+                    // 3. Remove marcadores de paginação de dedo (ex: Parte 1 de 4)
+                    if (/^parte \d+ de \d+$/.test(txt)) return false;
+                    return true;
+                });
+            }
+            // -------------------------------------------------
+            
             if (modoCompacto) {
                 linhasOriginais = linhasOriginais.filter(l => l.trim() !== '');
             }
@@ -1871,7 +1886,7 @@ fileInputLote.addEventListener('change', (e) => {
             
             content.innerHTML = html;
         }
-
+        
         function rerenderizarConteudoAtual() {
             const cifraEscolhida = banco[cifraSelector.value];
             if (cifraEscolhida) renderizarConteudo(cifraEscolhida.texto, transposeAtual);
