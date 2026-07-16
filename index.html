@@ -654,19 +654,21 @@
         <div id="importBox">
             <div id="importBoxTitle">📥 Importar de um site de cifras (CifraClub, Cifras, etc.)</div>
             <div id="importBoxSteps">
-            
+                1. Arraste este link para a barra de favoritos do navegador:
+                <a href="javascript:..." id="btnBookmarklet">📎 Importar Cifra</a>
+                <br>2. Abra a música desejada no CifraClub ou Cifras e clique nesse favorito.
+                <br>3. Volte aqui e toque no botão abaixo.
+            </div>
             <button type="button" id="btnColarClipboard" class="btn-info btn-sm">📋 Colar da área de transferência</button>
         </div>
         <input type="text" id="novaTitulo" placeholder="Digite o título da música">
         <textarea id="novaLetra" placeholder="Cole a cifra aqui..."></textarea>
         
-        <!-- BOTÕES RESTAURADOS AQUI -->
         <div style="display: flex; gap: 10px;">
             <button id="btnSalvarCifra" class="btn-success">Salvar no Acervo</button>
             <button id="btnCancelar" class="btn-danger">Cancelar</button>
         </div>
-        </div>
-    </div>
+    </div> <!-- ESSA É A TAG QUE ESTAVA FALTANDO! -->
 
     <div id="controls">
         <button id="toggleBtn">Iniciar</button>
