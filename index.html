@@ -248,6 +248,59 @@
         }
         .btn-zoom { padding: 3px 8px; font-size: 12px; font-weight: bold; }
 
+        .ios-toggle-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 4px 8px;
+            border-radius: 20px;
+        }
+
+        .ios-toggle {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .ios-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .ios-toggle .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #555;
+            border-radius: 24px;
+            transition: background-color 0.2s;
+        }
+
+        .ios-toggle .slider::before {
+            content: "";
+            position: absolute;
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+
+        .ios-toggle input:checked + .slider {
+            background-color: #28a745;
+        }
+
+        .ios-toggle input:checked + .slider::before {
+            transform: translateX(16px);
+        }
         #acordesGroup {
             display: inline-flex;
             align-items: center;
@@ -445,8 +498,21 @@
                 <button id="btnZoomIn" class="btn-sm btn-zoom" title="Aumentar diagrama">+</button>
             </span>
         </div>
-        <button id="btnCompacto" class="btn-sm">🗜️ Compactar</button>
-        <button id="btnTablaturas" class="btn-sm">🎵 Tabs</button>
+        <label class="ios-toggle-wrap">
+    🗜️ Compactar
+    <span class="ios-toggle">
+        <input type="checkbox" id="btnCompacto">
+        <span class="slider"></span>
+    </span>
+</label>
+
+<label class="ios-toggle-wrap">
+    🎵 Tabs
+    <span class="ios-toggle">
+        <input type="checkbox" id="btnTablaturas">
+        <span class="slider"></span>
+    </span>
+</label>
         <button id="btnEditar" class="btn-sm btn-warning">✏️ Editar</button>
         <button id="btnExcluir" class="btn-sm btn-danger">🗑️ Excluir</button>
     </div>
@@ -839,7 +905,10 @@
                     while (j < linhas.length && ehLinhaDeTablatura(linhas[j])) j++;
                     const tamanhoBloco = j - i;
                     if (tamanhoBloco >= 2 && !mostrarTablaturas) {
-                        resultado.push(`🎸 [Tablatura oculta — ${tamanhoBloco} linhas — toque em "🎵 Tabs" para exibir]`);
+                        const anterior = resultado[resultado.length - 1] || '';
+                        const rotulo = anterior.trim().match(/^[\[\(](.+?)[\]\)]$/);
+                        const nome = rotulo ? rotulo[1] : 'Tab';
+                        resultado.push(`🎸 [${nome} suprimida]`);
                     } else {
                         for (let k = i; k < j; k++) resultado.push(linhas[k]);
                     }
@@ -859,12 +928,14 @@
         }
         atualizarBotaoTablaturas();
 
-        btnTablaturas.addEventListener('click', () => {
-            mostrarTablaturas = !mostrarTablaturas;
+        btnTablaturas.addEventListener('change', () => {
+            mostrarTablaturas = btnTablaturas.checked;
             localStorage.setItem('mostrarTablaturas', mostrarTablaturas ? '1' : '0');
-            atualizarBotaoTablaturas();
             rerenderizarConteudoAtual();
         });
+
+        // ao carregar a página, sincronize o estado inicial do toggle
+        btnTablaturas.checked = mostrarTablaturas;
 
         function escapeHtml(str) {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1402,17 +1473,13 @@
         }
 
         // Modo compacto: remove linhas em branco pra aproveitar mais a tela
-        let modoCompacto = localStorage.getItem('modoCompacto') === '1';
+        let modoCompacto = localStorage.getItem('modoCompacto') !== '0';
 
-        function atualizarBotaoCompacto() {
-            btnCompacto.style.backgroundColor = modoCompacto ? '#28a745' : '';
-        }
-        atualizarBotaoCompacto();
+        btnCompacto.checked = modoCompacto;
 
-        btnCompacto.addEventListener('click', () => {
-            modoCompacto = !modoCompacto;
+        btnCompacto.addEventListener('change', () => {
+            modoCompacto = btnCompacto.checked;
             localStorage.setItem('modoCompacto', modoCompacto ? '1' : '0');
-            atualizarBotaoCompacto();
             rerenderizarConteudoAtual();
         });
 
