@@ -446,6 +446,7 @@
             </span>
         </div>
         <button id="btnCompacto" class="btn-sm">🗜️ Compactar</button>
+        <button id="btnTablaturas" class="btn-sm">🎵 Tabs</button>
         <button id="btnEditar" class="btn-sm btn-warning">✏️ Editar</button>
         <button id="btnExcluir" class="btn-sm btn-danger">🗑️ Excluir</button>
     </div>
@@ -520,6 +521,7 @@
         const btnZoomOut = document.getElementById('btnZoomOut');
         const zoomGroup = document.getElementById('zoomGroup');
         const btnCompacto = document.getElementById('btnCompacto');
+        const btnTablaturas = document.getElementById('btnTablaturas');
         const btnTema = document.getElementById('btnTema');
         const btnMenu = document.getElementById('btnMenu');
         const menuExtra = document.getElementById('menuExtra');
@@ -815,6 +817,54 @@
             const validos = tokens.filter(t => CHORD_TOKEN.test(t));
             return validos.length / tokens.length >= 0.8;
         }
+
+        // ===== Detecção e ocultação de blocos de tablatura (diagramas de traste) =====
+        function ehLinhaDeTablatura(linha) {
+            const t = linha.trim();
+            if (t.length < 6) return false;
+            if (!/[-|]/.test(t)) return false;
+            const relevantes = (t.match(/[0-9hpbrx\/\\~\-|]/gi) || []).length;
+            return relevantes / t.length >= 0.6;
+        }
+
+        // Junta linhas de tablatura consecutivas em blocos. Blocos com 2+ linhas (diagrama real
+        // de várias cordas) são substituídos por um aviso quando ocultos; linha isolada (riff rápido
+        // escrito numa única linha) nunca é escondida.
+        function prepararLinhasComTablatura(linhas) {
+            const resultado = [];
+            let i = 0;
+            while (i < linhas.length) {
+                if (ehLinhaDeTablatura(linhas[i])) {
+                    let j = i;
+                    while (j < linhas.length && ehLinhaDeTablatura(linhas[j])) j++;
+                    const tamanhoBloco = j - i;
+                    if (tamanhoBloco >= 2 && !mostrarTablaturas) {
+                        resultado.push(`🎸 [Tablatura oculta — ${tamanhoBloco} linhas — toque em "🎵 Tabs" para exibir]`);
+                    } else {
+                        for (let k = i; k < j; k++) resultado.push(linhas[k]);
+                    }
+                    i = j;
+                } else {
+                    resultado.push(linhas[i]);
+                    i++;
+                }
+            }
+            return resultado;
+        }
+
+        let mostrarTablaturas = localStorage.getItem('mostrarTablaturas') === '1';
+
+        function atualizarBotaoTablaturas() {
+            btnTablaturas.style.backgroundColor = mostrarTablaturas ? '#28a745' : '';
+        }
+        atualizarBotaoTablaturas();
+
+        btnTablaturas.addEventListener('click', () => {
+            mostrarTablaturas = !mostrarTablaturas;
+            localStorage.setItem('mostrarTablaturas', mostrarTablaturas ? '1' : '0');
+            atualizarBotaoTablaturas();
+            rerenderizarConteudoAtual();
+        });
 
         function escapeHtml(str) {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1368,6 +1418,7 @@
 
         function renderizarConteudo(texto, semitons) {
             let linhasOriginais = texto.split('\n');
+            linhasOriginais = prepararLinhasComTablatura(linhasOriginais);
             if (modoCompacto) {
                 linhasOriginais = linhasOriginais.filter(l => l.trim() !== '');
             }
