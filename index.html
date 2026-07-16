@@ -435,7 +435,7 @@
             align-items: center;
             gap: 10px;
             border-top: 1px solid var(--border);
-            z-index: 100;
+            z-index: 10000; /* Deve ser maior que o z-index do syncOverlay (9999) */
             flex-wrap: nowrap;
         }
 
@@ -603,6 +603,13 @@
     <span id="transposeLabel" style="font-size:12px;color:var(--text-muted);padding:0 6px;">0</span>
     <button id="btnTransposeUp" class="btn-sm btn-zoom" title="Subir tom">▲ Tom</button>
 </div>
+    <label class="ios-toggle-wrap">
+            📝 Só Letra
+            <span class="ios-toggle">
+                <input type="checkbox" id="btnSoLetra">
+                <span class="slider"></span>
+            </span>
+        </label>
         <div id="acordesGroup">
     <label class="ios-toggle-wrap">
         🎸 Acordes
@@ -728,6 +735,22 @@
         let isPlaying = false;
         let animationId;
         let wakeLock = null;
+
+        const btnSoLetra = document.getElementById('btnSoLetra');
+        let mostrarSoLetra = localStorage.getItem('mostrarSoLetra') === '1';
+        btnSoLetra.checked = mostrarSoLetra;
+
+        btnSoLetra.addEventListener('change', () => {
+            mostrarSoLetra = btnSoLetra.checked;
+            localStorage.setItem('mostrarSoLetra', mostrarSoLetra ? '1' : '0');
+            
+            // UX inteligente: Se ativou "Só Letra", desliga o painel lateral de acordes pra limpar a tela
+            if (mostrarSoLetra && btnAcordes.checked) {
+                btnAcordes.click(); // Simula o clique no botão de acordes para recolhê-lo
+            }
+            
+            rerenderizarConteudoAtual();
+        });
 
         // Adicione junto das outras variáveis globais (logo abaixo de let wakeLock = null;)
         let isSyncing = false;
@@ -1771,9 +1794,11 @@ fileInputLote.addEventListener('change', (e) => {
         function renderizarConteudo(texto, semitons) {
             let linhasOriginais = texto.split('\n');
             linhasOriginais = prepararLinhasComTablatura(linhasOriginais);
+            
             if (modoCompacto) {
                 linhasOriginais = linhasOriginais.filter(l => l.trim() !== '');
             }
+            
             const maxChars = calcularMaxChars();
             const linhasFinais = [];
 
@@ -1783,22 +1808,27 @@ fileInputLote.addEventListener('change', (e) => {
                     const proxima = linhasOriginais[i + 1];
                     const proximaEhAcorde = proxima !== undefined && ehLinhaDeAcordes(proxima);
                     if (proxima !== undefined && !proximaEhAcorde && proxima.trim() !== '') {
-                        // par acorde + letra: quebra os dois juntos, mantendo alinhamento
+                        // Par acorde + letra
                         quebrarParDeLinhas(linha, proxima, maxChars).forEach(([ac, le]) => {
-                            linhasFinais.push({ tipo: 'chord', texto: ac });
+                            if (!mostrarSoLetra) {
+                                linhasFinais.push({ tipo: 'chord', texto: ac });
+                            }
                             linhasFinais.push({ tipo: 'texto', texto: le });
                         });
-                        i++; // já consumiu a linha de letra
+                        i++; // Pula a próxima linha, pois já foi processada como letra
                     } else {
-                        // linha de acorde solta (ex: introdução instrumental)
-                        quebrarLinhaSimples(linha, maxChars).forEach(l => linhasFinais.push({ tipo: 'chord', texto: l }));
+                        // Linha de acorde solta (ex: introdução instrumental)
+                        if (!mostrarSoLetra) {
+                            quebrarLinhaSimples(linha, maxChars).forEach(l => linhasFinais.push({ tipo: 'chord', texto: l }));
+                        }
                     }
                 } else {
+                    // Linha de texto normal
                     quebrarLinhaSimples(linha, maxChars).forEach(l => linhasFinais.push({ tipo: 'texto', texto: l }));
                 }
             }
 
-            let contadorPartes = 1; // NOVO: Contador cronológico
+            let contadorPartes = 1; // Contador cronológico
 
             const html = linhasFinais.map(l => {
                 if (l.tipo === 'chord') {
@@ -1814,8 +1844,7 @@ fileInputLote.addEventListener('change', (e) => {
                 if (/^\[.+\]$|^\(.+\)$|^[A-Za-zÀ-ÿ]+:$/.test(textoTrimmed)) {
                     let nomeTag = textoTrimmed;
 
-                    // INTERCEPTADOR: Se for uma tag de "Parte" confusa do CifraClub,
-                    // nós substituímos por uma ordem cronológica limpa.
+                    // INTERCEPTADOR: Se for uma tag de "Parte" do CifraClub, forçamos ordem cronológica
                     const regexPartes = /^[\[\(](?:primeira|segunda|terceira|quarta|quinta|sexta|sétima|setima|oitava|nona|décima|decima)?\s*parte\s*\d*[\]\)]$/i;
                     
                     if (regexPartes.test(nomeTag)) {
@@ -1828,6 +1857,7 @@ fileInputLote.addEventListener('change', (e) => {
 
                 return escapeHtml(l.texto);
             }).join('\n');
+            
             content.innerHTML = html;
         }
 
