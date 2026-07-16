@@ -734,7 +734,7 @@
         let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
         function atualizarUIModoAdmin() {
-            const botoesEdicao = document.querySelectorAll('#btnNovaCifra, #btnEditar, #btnExcluir, #btnSalvarCifra, #btnCancelar, #btnImportarLoteNuvem, #btnImportar');
+            const botoesEdicao = document.querySelectorAll('#btnNovaCifra, #btnEditar, #btnExcluir, #btnSalvarCifra, #btnCancelar, #btnImportarLoteNuvem');
             botoesEdicao.forEach(btn => {
                 btn.style.display = isAdmin ? 'block' : 'none';
             });
@@ -962,6 +962,20 @@ fileInputLote.addEventListener('change', (e) => {
             syncStatus.style.color = cor || '#666';
         }
 
+        // Monta a mensagem exibida quando não foi possível buscar a nuvem agora
+        function mensagemAcervoLocal() {
+            const isoSalvo = localStorage.getItem('ultimoSyncOk');
+            let quando = 'nunca sincronizado';
+            if (isoSalvo) {
+                const d = new Date(isoSalvo);
+                const dataFmt = d.toLocaleDateString('pt-BR');
+                const horaFmt = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                quando = dataFmt + ' às ' + horaFmt;
+            }
+            const permissao = isAdmin ? 'edição liberada' : 'modo leitura';
+            return '📦 Acervo de ' + quando + ' (' + permissao + ')';
+        }
+
         function tamanhoBytes(obj) {
             return new TextEncoder().encode(JSON.stringify(obj)).length;
         }
@@ -1093,10 +1107,11 @@ fileInputLote.addEventListener('change', (e) => {
                 }
                 banco = dados;
                 localStorage.setItem('bancoCache', JSON.stringify(banco));
+                localStorage.setItem('ultimoSyncOk', new Date().toISOString());
                 statusMsg('☁️ Sincronizado (' + chunkIds.length + ' pedaço(s))', '#28a745');
             } catch (e) {
                 console.error('carregarNuvem erro:', e);
-                statusMsg('⚠️ Sem conexão com a nuvem — mostrando última cópia salva neste aparelho', '#dc3545');
+                statusMsg(mensagemAcervoLocal(), '#e0a800');
             } finally {
                 // LIBERA A TELA SEMPRE (até se der erro)
                 esconderOverlaySync(); 
@@ -1137,6 +1152,7 @@ fileInputLote.addEventListener('change', (e) => {
                 }
 
                 await jsonbinPut(cloudConfig.manifestId, cloudConfig.apiKey, { chunkIds: novosIds });
+                localStorage.setItem('ultimoSyncOk', new Date().toISOString());
                 statusMsg('☁️ Sincronizado (' + novosIds.length + ' pedaço(s))', '#28a745');
             } catch (e) {
                 console.error('salvarNuvem erro:', e);
