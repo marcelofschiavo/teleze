@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teleprompter de Cifras</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: sans-serif;
+            padding-bottom: 130px;
+        }
+
+        #header {
+            background: #1e1e1e;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+        }
+
+        #searchBox {
+            width: 40%;
+            max-width: 260px;
+        }
+
+        select, input[type="text"] {
+            padding: 10px;
+            font-size: 16px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+
+        select { width: 40%; max-width: 260px; }
+
+        button {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #0056b3; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-info { background-color: #17a2b8; }
+        .btn-info:hover { background-color: #117a8b; }
+        .btn-warning { background-color: #ffc107; color: #222; }
+        .btn-warning:hover { background-color: #e0a800; }
+        .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+        #songBar {
+            display: none;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px;
+            background: #181818;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        #songBar .tag {
+            font-size: 12px;
+            color: #888;
+        }
+
+        #mainArea {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        #content {
+            padding: 40px 20px;
+            max-width: 900px;
+            flex: 1 1 auto;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            font-size: 24px;
+            line-height: 1.4;
+            min-height: 100vh;
+        }
+
+        .chord-line {
+            color: #ffb300;
+            font-weight: bold;
+        }
+
+        #chordPanel {
+            display: none;
+            flex: 0 0 180px;
+            position: sticky;
+            top: 15px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 90vh;
+            overflow-y: auto;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        #chordPanel.show { display: flex; }
+
+        .chord-diagram-box {
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .chord-diagram-box svg {
+            background: #222;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 800px) {
+            #chordPanel {
+                position: static;
+                flex: 1 1 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: center;
+                max-height: none;
+            }
+            .chord-diagram-box { width: 90px; }
+        }
+
+        #tapFlash {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            text-align: center;
+            padding: 6px;
+            font-size: 13px;
+            background: #dc3545;
+            color: white;
+            transform: translateY(-100%);
+            transition: transform 0.25s;
+            z-index: 200;
+        }
+        #tapFlash.show { transform: translateY(0); }
+
+        #editorArea {
+            display: none;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #novaTitulo { width: 100%; box-sizing: border-box; }
+
+        #novaLetra {
+            width: 100%;
+            height: 60vh;
+            background: #2a2a2a;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: auto;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: #1e1e1e;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            border-top: 1px solid #333;
+            z-index: 100;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        input[type=range] { width: 130px; }
+
+        #wakeStatus {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            padding: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="tapFlash">Pausado (toque na tela)</div>
+
+    <div id="header">
+        <input type="text" id="searchBox" placeholder="🔍 Buscar cifra...">
+        <select id="cifraSelector">
+            <option value="" disabled selected>Selecione uma cifra...</option>
+        </select>
+        <button id="btnNovaCifra" class="btn-success">+ Nova</button>
+        <button id="btnExportar" class="btn-info">📥 Exportar JSON</button>
+        <button id="btnImportar" class="btn-info">📤 Importar JSON</button>
+        <button id="btnMesclar" class="btn-info">🔀 Mesclar p/ Base</button>
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+
+    <div id="songBar">
+        <span class="tag" id="origemTag"></span>
+        <button id="btnTransposeDown" class="btn-sm">Tom -1</button>
+        <span id="transposeLabel" style="font-size:12px;color:#aaa;">0</span>
+        <button id="btnTransposeUp" class="btn-sm">Tom +1</button>
+        <button id="btnAcordes" class="btn-sm btn-info">🎸 Acordes</button>
+        <button id="btnEditar" class="btn-sm btn-warning">✏️ Editar</button>
+        <button id="btnExcluir" class="btn-sm btn-danger">🗑️ Excluir</button>
+    </div>
+
+    <div id="mainArea">
+        <div id="content">Selecione uma música no menu acima ou adicione/importe novas cifras.</div>
+        <div id="chordPanel"></div>
+    </div>
+
+    <div id="editorArea">
+        <h2 id="editorTitle">Adicionar Nova Cifra</h2>
+        <input type="text" id="novaTitulo" placeholder="Digite o título da música">
+        <textarea id="novaLetra" placeholder="Cole a cifra aqui..."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <button id="btnSalvarCifra" class="btn-success">Salvar no Acervo</button>
+            <button id="btnCancelar" class="btn-danger">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="toggleBtn">Iniciar</button>
+        <div class="control-group">
+            <label>Velocidade</label>
+            <input type="range" id="speed" min="1" max="100" value="15">
+        </div>
+        <div class="control-group">
+            <label>Tamanho Letra</label>
+            <input type="range" id="fontSize" min="16" max="80" value="24">
+        </div>
+    </div>
+    <div id="wakeStatus"></div>
+
+    <script>
+        // ===== Estrutura de dados =====
+        // bancoBase: carregado de repertorio.json (arquivo estático no repo, opcional)
+        // bancoLocal: cifras adicionadas/importadas pelo usuário, salvas no localStorage
+        // cifra = { titulo, texto }
+        let bancoBase = [];
+        let bancoLocal = JSON.parse(localStorage.getItem('minhasCifras')) || [];
+        let listaCombinada = []; // [{titulo, texto, origem: 'base'|'local', idx: index no array de origem}]
+        let editandoIndexCombinado = null; // quando editando, guarda índice na listaCombinada
+        let transposeAtual = 0;
+
+        const content = document.getElementById('content');
+        const editorArea = document.getElementById('editorArea');
+        const editorTitle = document.getElementById('editorTitle');
+        const cifraSelector = document.getElementById('cifraSelector');
+        const searchBox = document.getElementById('searchBox');
+        const songBar = document.getElementById('songBar');
+        const origemTag = document.getElementById('origemTag');
+        const btnEditar = document.getElementById('btnEditar');
+        const btnExcluir = document.getElementById('btnExcluir');
+        const btnTransposeUp = document.getElementById('btnTransposeUp');
+        const btnTransposeDown = document.getElementById('btnTransposeDown');
+        const transposeLabel = document.getElementById('transposeLabel');
+
+        const btnNovaCifra = document.getElementById('btnNovaCifra');
+        const btnSalvarCifra = document.getElementById('btnSalvarCifra');
+        const btnCancelar = document.getElementById('btnCancelar');
+        const novaTitulo = document.getElementById('novaTitulo');
+        const novaLetra = document.getElementById('novaLetra');
+
+        const btnExportar = document.getElementById('btnExportar');
+        const btnImportar = document.getElementById('btnImportar');
+        const fileInput = document.getElementById('fileInput');
+        const btnMesclar = document.getElementById('btnMesclar');
+        const btnAcordes = document.getElementById('btnAcordes');
+        const chordPanel = document.getElementById('chordPanel');
+
+        const toggleBtn = document.getElementById('toggleBtn');
+        const speedInput = document.getElementById('speed');
+        const fontSizeInput = document.getElementById('fontSize');
+        const tapFlash = document.getElementById('tapFlash');
+        const wakeStatus = document.getElementById('wakeStatus');
+
+        let isPlaying = false;
+        let animationId;
+        let wakeLock = null;
+
+        // ===== Carrega acervo base (opcional, se existir repertorio.json no mesmo diretório) =====
+        async function carregarBase() {
+            try {
+                const resp = await fetch('repertorio.json', { cache: 'no-store' });
+                if (resp.ok) {
+                    const dados = await resp.json();
+                    if (Array.isArray(dados)) bancoBase = dados;
+                }
+            } catch (e) {
+                // arquivo não existe ou não pôde ser carregado - segue só com o acervo local
+            }
+            montarListaCombinada();
+        }
+
+        function montarListaCombinada() {
+            listaCombinada = [];
+            bancoBase.forEach((c, i) => listaCombinada.push({ titulo: c.titulo, texto: c.texto, origem: 'base', idx: i }));
+            bancoLocal.forEach((c, i) => listaCombinada.push({ titulo: c.titulo, texto: c.texto, origem: 'local', idx: i }));
+            listaCombinada.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+            renderizarLista();
+        }
+
+        function renderizarLista(filtro = '') {
+            const termo = filtro.trim().toLowerCase();
+            cifraSelector.innerHTML = '<option value="" disabled selected>Selecione uma cifra...</option>';
+            listaCombinada.forEach((cifra, index) => {
+                if (termo && !cifra.titulo.toLowerCase().includes(termo)) return;
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = cifra.titulo + (cifra.origem === 'local' ? ' (sua)' : '');
+                cifraSelector.appendChild(option);
+            });
+        }
+
+        searchBox.addEventListener('input', (e) => renderizarLista(e.target.value));
+
+        // ===== Detecção e destaque de linhas de acorde =====
+        const CHORD_TOKEN = /^[A-G](#|b)?(m|maj|min|dim|aug|sus|add)?[0-9]*(\/[A-G](#|b)?)?$/;
+
+        function ehLinhaDeAcordes(linha) {
+            const trimmed = linha.trim();
+            if (!trimmed) return false;
+            const tokens = trimmed.split(/\s+/);
+            if (tokens.length === 0) return false;
+            const validos = tokens.filter(t => CHORD_TOKEN.test(t));
+            return validos.length / tokens.length >= 0.8;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ===== Transposição =====
+        const NOTAS_SUSTENIDO = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const NOTAS_BEMOL = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+        function transporChord(token, semitons) {
+            const m = token.match(/^([A-G])(#|b)?(.*)$/);
+            if (!m) return token;
+            const [, letra, acidente, resto] = m;
+            const notaOriginal = letra + (acidente || '');
+            const usaSustenido = acidente !== 'b';
+            let idx = NOTAS_SUSTENIDO.indexOf(notaOriginal);
+            if (idx === -1) idx = NOTAS_BEMOL.indexOf(notaOriginal);
+            if (idx === -1) return token;
+            let novoIdx = (idx + semitons + 12) % 12;
+            const novaNota = usaSustenido ? NOTAS_SUSTENIDO[novoIdx] : NOTAS_BEMOL[novoIdx];
+            return novaNota + resto;
+        }
+
+        // ===== Diagramas de acorde (formato E-shape em pestana, cordas 6->1: E A D G B e) =====
+        // Padrões relativos à pestana (0 = pestana / corda solta na posição base)
+        const CHORD_SHAPES = {
+            '':     [0, 2, 2, 1, 0, 0],   // maior
+            'm':    [0, 2, 2, 0, 0, 0],   // menor
+            '7':    [0, 2, 0, 1, 0, 0],
+            'm7':   [0, 2, 0, 0, 0, 0],
+            'maj7': [0, 2, 1, 1, 0, 0],
+            'sus4': [0, 2, 2, 2, 0, 0]
+        };
+        const APROXIMADO = new Set(['dim', 'aug', 'sus2', 'add9', '6', '9', 'm6']);
+
+        function normalizarQualidade(sufixo) {
+            if (sufixo in CHORD_SHAPES) return sufixo;
+            if (APROXIMADO.has(sufixo)) return sufixo.startsWith('m') && sufixo !== 'maj7' ? 'm' : '';
+            // qualidades desconhecidas: tenta aproximar por 'm' se começar com m, senão maior
+            if (sufixo.startsWith('m') && !sufixo.startsWith('maj')) return 'm';
+            return '';
+        }
+
+        function parseChordFull(token) {
+            const m = token.match(/^([A-G])(#|b)?([^\/]*)/);
+            if (!m) return null;
+            const [, letra, acidente, sufixo] = m;
+            return { nota: letra + (acidente || ''), sufixo: sufixo || '' };
+        }
+
+        function gerarSVGAcorde(nomeExibicao, nota, sufixo) {
+            const qualidadeReal = normalizarQualidade(sufixo);
+            const aproximado = !(sufixo in CHORD_SHAPES);
+            const shape = CHORD_SHAPES[qualidadeReal];
+
+            let idx = NOTAS_SUSTENIDO.indexOf(nota);
+            if (idx === -1) idx = NOTAS_BEMOL.indexOf(nota);
+            if (idx === -1) idx = 0;
+            const semitonsDoE = (idx - 4 + 12) % 12; // E = índice 4
+            const pestana = semitonsDoE;
+
+            const numFrets = 4;
+            const startFret = pestana === 0 ? 0 : pestana;
+            const w = 110, h = 130, margin = 18;
+            const stringGap = (w - 2 * margin) / 5;
+            const fretGap = (h - 2 * margin - 10) / numFrets;
+
+            let svg = `<svg viewBox="0 0 ${w} ${h}" width="100" height="118" xmlns="http://www.w3.org/2000/svg">`;
+
+            // Indicador de casa (se não for aberta)
+            if (startFret > 0) {
+                svg += `<text x="${margin - 12}" y="${margin + 10}" font-size="10" fill="#aaa">${startFret}fr</text>`;
+            }
+
+            // Cordas verticais
+            for (let s = 0; s < 6; s++) {
+                const x = margin + s * stringGap;
+                svg += `<line x1="${x}" y1="${margin}" x2="${x}" y2="${margin + numFrets * fretGap}" stroke="#888" stroke-width="1"/>`;
+            }
+            // Trastes horizontais
+            for (let f = 0; f <= numFrets; f++) {
+                const y = margin + f * fretGap;
+                const espessura = (f === 0 && startFret === 0) ? 3 : 1;
+                svg += `<line x1="${margin}" y1="${y}" x2="${margin + 5 * stringGap}" y2="${y}" stroke="#888" stroke-width="${espessura}"/>`;
+            }
+
+            // Pestana (barra) quando relevante
+            if (startFret > 0) {
+                const yBarra = margin + fretGap * 0.5;
+                svg += `<rect x="${margin - 4}" y="${yBarra - 4}" width="${5 * stringGap + 8}" height="8" rx="4" fill="#ffb300" opacity="0.85"/>`;
+            }
+
+            // Pontos dos dedos
+            shape.forEach((relFret, sIdx) => {
+                const x = margin + sIdx * stringGap;
+                if (relFret < 0) {
+                    svg += `<text x="${x}" y="${margin - 6}" font-size="10" fill="#dc3545" text-anchor="middle">x</text>`;
+                    return;
+                }
+                if (startFret === 0 && relFret === 0) {
+                    svg += `<circle cx="${x}" cy="${margin - 6}" r="3" fill="none" stroke="#28a745" stroke-width="1.5"/>`;
+                    return;
+                }
+                if (relFret === 0) return; // coberto pela pestana
+                const fretPos = relFret;
+                const y = margin + (fretPos - 0.5) * fretGap;
+                svg += `<circle cx="${x}" cy="${y}" r="6" fill="#ffb300"/>`;
+            });
+
+            svg += `</svg>`;
+            const nota_label = aproximado ? nomeExibicao + ' *' : nomeExibicao;
+            return `<div class="chord-diagram-box">${svg}<div>${nota_label}</div></div>`;
+        }
+
+        function extrairAcordesUnicos(texto) {
+            const linhas = texto.split('\n');
+            const encontrados = [];
+            const vistos = new Set();
+            linhas.forEach(linha => {
+                if (!ehLinhaDeAcordes(linha)) return;
+                linha.trim().split(/\s+/).forEach(tok => {
+                    if (vistos.has(tok)) return;
+                    vistos.add(tok);
+                    encontrados.push(tok);
+                });
+            });
+            return encontrados;
+        }
+
+        function renderizarPainelAcordes(texto, semitons) {
+            const tokens = extrairAcordesUnicos(texto);
+            let html = '';
+            tokens.forEach(tok => {
+                const info = parseChordFull(tok);
+                if (!info) return;
+                const notaTransposta = semitons !== 0 ? transporChord(info.nota, semitons) : info.nota;
+                const nomeExibicao = notaTransposta + info.sufixo;
+                html += gerarSVGAcorde(nomeExibicao, notaTransposta, info.sufixo);
+            });
+            chordPanel.innerHTML = html || '<div class="chord-diagram-box">Nenhum acorde detectado</div>';
+        }
+
+        btnAcordes.addEventListener('click', () => {
+            chordPanel.classList.toggle('show');
+            if (chordPanel.classList.contains('show')) {
+                const cifraEscolhida = listaCombinada[cifraSelector.value];
+                if (cifraEscolhida) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
+            }
+        });
+
+        function renderizarConteudo(texto, semitons) {
+            const linhas = texto.split('\n');
+            const html = linhas.map(linha => {
+                if (ehLinhaDeAcordes(linha)) {
+                    let linhaProcessada = linha;
+                    if (semitons !== 0) {
+                        linhaProcessada = linha.replace(/\S+/g, (tok) => transporChord(tok, semitons));
+                    }
+                    return '<span class="chord-line">' + escapeHtml(linhaProcessada) + '</span>';
+                }
+                return escapeHtml(linha);
+            }).join('\n');
+            content.innerHTML = html;
+        }
+
+        // ===== Seleção de música =====
+        cifraSelector.addEventListener('change', (e) => {
+            const cifraEscolhida = listaCombinada[e.target.value];
+            if (cifraEscolhida) {
+                transposeAtual = 0;
+                transposeLabel.textContent = '0';
+                renderizarConteudo(cifraEscolhida.texto, 0);
+                window.scrollTo(0, 0);
+                if (isPlaying) toggleBtn.click();
+                editorArea.style.display = 'none';
+                content.style.display = 'block';
+                songBar.style.display = 'flex';
+                origemTag.textContent = cifraEscolhida.origem === 'base' ? 'Acervo base' : 'Sua cifra (editável)';
+                btnEditar.style.display = cifraEscolhida.origem === 'local' ? 'inline-block' : 'none';
+                btnExcluir.style.display = cifraEscolhida.origem === 'local' ? 'inline-block' : 'none';
+                if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, 0);
+            }
+        });
+
+        btnTransposeUp.addEventListener('click', () => {
+            transposeAtual++;
+            transposeLabel.textContent = (transposeAtual > 0 ? '+' : '') + transposeAtual;
+            const cifraEscolhida = listaCombinada[cifraSelector.value];
+            if (cifraEscolhida) {
+                renderizarConteudo(cifraEscolhida.texto, transposeAtual);
+                if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
+            }
+        });
+
+        btnTransposeDown.addEventListener('click', () => {
+            transposeAtual--;
+            transposeLabel.textContent = (transposeAtual > 0 ? '+' : '') + transposeAtual;
+            const cifraEscolhida = listaCombinada[cifraSelector.value];
+            if (cifraEscolhida) {
+                renderizarConteudo(cifraEscolhida.texto, transposeAtual);
+                if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
+            }
+        });
+
+        // ===== Novo / Editar =====
+        btnNovaCifra.addEventListener('click', () => {
+            editandoIndexCombinado = null;
+            editorTitle.textContent = 'Adicionar Nova Cifra';
+            novaTitulo.value = '';
+            novaLetra.value = '';
+            content.style.display = 'none';
+            songBar.style.display = 'none';
+            editorArea.style.display = 'flex';
+            if (isPlaying) toggleBtn.click();
+        });
+
+        btnEditar.addEventListener('click', () => {
+            const idx = parseInt(cifraSelector.value);
+            const cifra = listaCombinada[idx];
+            if (!cifra || cifra.origem !== 'local') return;
+            editandoIndexCombinado = idx;
+            editorTitle.textContent = 'Editar Cifra';
+            novaTitulo.value = cifra.titulo;
+            novaLetra.value = cifra.texto;
+            content.style.display = 'none';
+            songBar.style.display = 'none';
+            editorArea.style.display = 'flex';
+            if (isPlaying) toggleBtn.click();
+        });
+
+        btnExcluir.addEventListener('click', () => {
+            const idx = parseInt(cifraSelector.value);
+            const cifra = listaCombinada[idx];
+            if (!cifra || cifra.origem !== 'local') return;
+            if (!confirm('Excluir "' + cifra.titulo + '" do seu acervo?')) return;
+            bancoLocal.splice(cifra.idx, 1);
+            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
+            montarListaCombinada();
+            content.textContent = 'Selecione uma música no menu acima ou adicione/importe novas cifras.';
+            songBar.style.display = 'none';
+        });
+
+        btnCancelar.addEventListener('click', () => {
+            editorArea.style.display = 'none';
+            content.style.display = 'block';
+            novaTitulo.value = '';
+            novaLetra.value = '';
+        });
+
+        btnSalvarCifra.addEventListener('click', () => {
+            const titulo = novaTitulo.value.trim();
+            const texto = novaLetra.value;
+            if (!titulo || !texto) {
+                alert("Preencha o título e cole a cifra.");
+                return;
+            }
+            if (editandoIndexCombinado !== null) {
+                const cifraOriginal = listaCombinada[editandoIndexCombinado];
+                bancoLocal[cifraOriginal.idx] = { titulo, texto };
+            } else {
+                bancoLocal.push({ titulo, texto });
+            }
+            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
+            novaTitulo.value = '';
+            novaLetra.value = '';
+            editandoIndexCombinado = null;
+            editorArea.style.display = 'none';
+            content.style.display = 'block';
+            montarListaCombinada();
+            // seleciona a cifra recém salva
+            const novoIndex = listaCombinada.findIndex(c => c.titulo === titulo && c.origem === 'local');
+            if (novoIndex >= 0) {
+                cifraSelector.value = novoIndex;
+                cifraSelector.dispatchEvent(new Event('change'));
+            }
+        });
+
+        // ===== Exportar / Importar (apenas acervo local, o base fica no repo) =====
+        btnExportar.addEventListener('click', () => {
+            if (bancoLocal.length === 0) {
+                alert("Seu acervo local está vazio. Adicione cifras antes de exportar.");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bancoLocal, null, 4));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "meu_acervo_cifras.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        });
+
+        btnImportar.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const jsonImportado = JSON.parse(event.target.result);
+                    if (Array.isArray(jsonImportado)) {
+                        if (confirm('Importar ' + jsonImportado.length + ' cifra(s)? Isso vai SUBSTITUIR seu acervo local atual (o acervo base não é afetado).')) {
+                            bancoLocal = jsonImportado;
+                            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
+                            montarListaCombinada();
+                            alert("Acervo local importado com sucesso!");
+                        }
+                    } else {
+                        alert("Arquivo JSON inválido para este formato.");
+                    }
+                } catch (err) {
+                    alert("Erro ao ler o arquivo JSON. Certifique-se de que é o arquivo correto.");
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        // ===== Mesclar acervo local no acervo base (gera novo repertorio.json p/ commit) =====
+        btnMesclar.addEventListener('click', () => {
+            if (bancoLocal.length === 0) {
+                alert("Seu acervo local está vazio, nada para mesclar.");
+                return;
+            }
+            const mesclado = bancoBase.concat(bancoLocal);
+            // remove duplicados por título (mantém a versão mais recente = a local, que vem depois)
+            const porTitulo = new Map();
+            mesclado.forEach(c => porTitulo.set(c.titulo, c));
+            const resultado = Array.from(porTitulo.values());
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(resultado, null, 4));
+            const a = document.createElement('a');
+            a.setAttribute("href", dataStr);
+            a.setAttribute("download", "repertorio.json");
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            if (confirm('Arquivo "repertorio.json" baixado com ' + resultado.length + ' cifra(s).\n\n' +
+                'Substitua o repertorio.json no seu repositório do Vercel e faça o deploy.\n\n' +
+                'Deseja limpar o acervo local agora (já que ele foi incorporado ao base)?')) {
+                bancoLocal = [];
+                localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
+                montarListaCombinada();
+                content.textContent = 'Selecione uma música no menu acima ou adicione/importe novas cifras.';
+                songBar.style.display = 'none';
+            }
+        });
+
+        // ===== Auto-scroll =====
+        function scrollPage() {
+            if (isPlaying) {
+                const velocidade = speedInput.value * 0.05;
+                window.scrollBy(0, velocidade);
+                animationId = requestAnimationFrame(scrollPage);
+            }
+        }
+
+        async function ativarWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeStatus.textContent = '🔒 Tela mantida ativa';
+                    wakeLock.addEventListener('release', () => {
+                        wakeStatus.textContent = '';
+                    });
+                } else {
+                    wakeStatus.textContent = '⚠️ Este navegador não suporta manter a tela ativa - ajuste o brilho/bloqueio manualmente';
+                }
+            } catch (err) {
+                wakeStatus.textContent = '⚠️ Não foi possível manter a tela ativa';
+            }
+        }
+
+        function liberarWakeLock() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+        }
+
+        // Reativa o wake lock se a aba voltar ao foco durante a reprodução (comportamento padrão do browser é liberar ao trocar de aba)
+        document.addEventListener('visibilitychange', () => {
+            if (isPlaying && document.visibilityState === 'visible') {
+                ativarWakeLock();
+            }
+        });
+
+        toggleBtn.addEventListener('click', () => {
+            if (editorArea.style.display === 'flex' || cifraSelector.value === "") return;
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                toggleBtn.textContent = 'Pausar';
+                toggleBtn.style.backgroundColor = '#dc3545';
+                scrollPage();
+                ativarWakeLock();
+            } else {
+                toggleBtn.textContent = 'Iniciar';
+                toggleBtn.style.backgroundColor = '#007bff';
+                cancelAnimationFrame(animationId);
+                liberarWakeLock();
+            }
+        });
+
+        // Toque na tela pausa e dá feedback visual (evita rolagem continuar sem perceber)
+        content.addEventListener('click', () => {
+            if (isPlaying) {
+                toggleBtn.click();
+                tapFlash.classList.add('show');
+                setTimeout(() => tapFlash.classList.remove('show'), 1200);
+            }
+        });
+
+        fontSizeInput.addEventListener('input', (e) => {
+            content.style.fontSize = e.target.value + 'px';
+        });
+
+        carregarBase();
+    </script>
+</body>
+</html>
