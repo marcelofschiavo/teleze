@@ -956,7 +956,7 @@ fileInputLote.addEventListener('change', (e) => {
                 chordPopup.classList.remove('show');
             }
         });
-        
+
         // ===== Controle visual do Overlay de Loading =====
         const syncOverlay = document.getElementById('syncOverlay');
         const syncOverlayText = document.getElementById('syncOverlayText');
@@ -1349,6 +1349,21 @@ fileInputLote.addEventListener('change', (e) => {
             { root: 2, rel: 0, name: 'Forma D7M', qual: 'maj7', frets: ['x', 'x', 0, 2, 2, 2] }
         ];
 
+        // ===== Funções utilitárias resgatadas =====
+        function parseChordFull(token) {
+            const m = token.match(/^([A-G])(#|b)?([^\/]*)/);
+            if (!m) return null;
+            const [, letra, acidente, sufixo] = m;
+            return { nota: letra + (acidente || ''), sufixo: sufixo || '' };
+        }
+
+        function notaDaCorda(stringIdx, fretAbs) {
+            if (fretAbs < 0 || fretAbs === 'x') return 'x';
+            const idx = (OPEN_SEMI[stringIdx] + fretAbs) % 12;
+            return NOTAS_SUSTENIDO[idx];
+        }
+        // ==========================================
+        
         function normalizarQualidade(sufixo) {
             let s = sufixo.toLowerCase();
             // Mapeia todas as extensões malucas brasileiras para o núcleo harmônico da tríade/tétrade
