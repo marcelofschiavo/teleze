@@ -697,7 +697,30 @@
         let banco = JSON.parse(localStorage.getItem('bancoCache')) || [];
         let editandoIndex = null; // índice em `banco` sendo editado
         let transposeAtual = 0;
-        let cloudConfig = JSON.parse(localStorage.getItem('cloudConfig')) || null; // {binId, apiKey}
+        
+        // ===== Configuração Pública (Pode ficar no código) =====
+        const DEFAULT_CONFIG = { 
+            manifestId: '6a585236f5f4af5e2995aed1', // O ID público
+            apiKey: '$2a$10$9kBr.w2XKfL8Y0FhF0Qbd.if8fkIyl1fh9ycj6wjTyUCi1t6rN8HC'        // A Chave de LEITURA (Read-Only)
+        };
+
+        // Verifica se o usuário já tem uma chave de admin salva
+        let cloudConfig = JSON.parse(localStorage.getItem('cloudConfig')) || DEFAULT_CONFIG;
+        
+        // Verifica se a chave atual tem permissão de escrita (se for a master key)
+        let isAdmin = localStorage.getItem('isAdmin') === 'true';
+
+        function atualizarUIModoAdmin() {
+            const botoesEdicao = document.querySelectorAll('#btnNovaCifra, #btnEditar, #btnExcluir, #btnSalvarCifra, #btnCancelar');
+            botoesEdicao.forEach(btn => {
+                btn.style.display = isAdmin ? 'block' : 'none';
+            });
+            // Esconde também o editor de área se não for admin
+            if (!isAdmin) editorArea.style.display = 'none';
+        }
+        
+        // Chame isso logo após o carregamento da página
+        atualizarUIModoAdmin();
 
         const content = document.getElementById('content');
         const editorArea = document.getElementById('editorArea');
@@ -1061,39 +1084,34 @@ fileInputLote.addEventListener('change', (e) => {
         }
 
         btnConfigNuvem.addEventListener('click', () => {
-            // --- PROTEÇÃO POR SENHA ---
-            const senhaCorreta = "1234"; // Defina a sua senha aqui!
-            const senhaDigitada = prompt("🔒 Área restrita de infraestrutura.\nDigite a senha de administrador:");
+            const senhaCorreta = "1234";
+            const senhaDigitada = prompt(isAdmin ? "🔒 Você já está no modo Admin.\nDeseja sair?" : "🔒 Área restrita. Digite a senha para editar:");
             
-            if (senhaDigitada !== senhaCorreta) {
-                if (senhaDigitada !== null) { // Se não foi o botão de "Cancelar"
-                    alert("❌ Senha incorreta.");
-                }
-                return; // Aborta e não mostra as opções de API
-            }
-            // --------------------------
+            if (senhaDigitada === null) return;
 
-            const manifestIdAtual = cloudConfig ? cloudConfig.manifestId : '';
-            const apiKeyAtual = cloudConfig ? cloudConfig.apiKey : '';
-            const manifestId = prompt(
-                'Cole o Bin ID do bin MANIFESTO no jsonbin.io (crie uma conta grátis em jsonbin.io, faça UM Bin novo com conteúdo {"chunkIds":[]} e copie o ID — os demais bins de dados são criados automaticamente):',
-                manifestIdAtual
-            );
-            if (manifestId === null) return;
-            const apiKey = prompt('Cole sua X-Master-Key do jsonbin.io (em "API Keys" no painel):', apiKeyAtual);
-            if (apiKey === null) return;
-            if (!manifestId.trim() || !apiKey.trim()) {
-                cloudConfig = null;
+            if (isAdmin && senhaDigitada === senhaCorreta) {
+                // Sair do modo admin
                 localStorage.removeItem('cloudConfig');
-                statusMsg('☁️ Nuvem desativada', '#666');
+                localStorage.removeItem('isAdmin');
+                cloudConfig = DEFAULT_CONFIG;
+                isAdmin = false;
+                alert("Modo Admin desativado.");
+                location.reload();
                 return;
             }
-            cloudConfig = { manifestId: manifestId.trim(), apiKey: apiKey.trim() };
-            localStorage.setItem('cloudConfig', JSON.stringify(cloudConfig));
-            if (confirm('Configuração salva. Deseja enviar seu acervo atual (' + banco.length + ' cifra(s)) pra nuvem agora, sobrescrevendo o que estiver lá?')) {
-                salvarNuvem();
+
+            if (senhaDigitada === senhaCorreta) {
+                const apiKeyMaster = prompt('Digite sua Master Key (com permissão de escrita):');
+                if (apiKeyMaster) {
+                    cloudConfig = { manifestId: cloudConfig.manifestId, apiKey: apiKeyMaster };
+                    localStorage.setItem('cloudConfig', JSON.stringify(cloudConfig));
+                    localStorage.setItem('isAdmin', 'true');
+                    isAdmin = true;
+                    atualizarUIModoAdmin();
+                    alert("Acesso de Edição Liberado!");
+                }
             } else {
-                carregarNuvem();
+                alert("Senha incorreta.");
             }
         });
 
@@ -1363,7 +1381,7 @@ fileInputLote.addEventListener('change', (e) => {
             return NOTAS_SUSTENIDO[idx];
         }
         // ==========================================
-        
+
         function normalizarQualidade(sufixo) {
             let s = sufixo.toLowerCase();
             // Mapeia todas as extensões malucas brasileiras para o núcleo harmônico da tríade/tétrade
