@@ -228,14 +228,14 @@
             <option value="" disabled selected>Selecione uma cifra...</option>
         </select>
         <button id="btnNovaCifra" class="btn-success">+ Nova</button>
-        <button id="btnExportar" class="btn-info">📥 Exportar JSON</button>
-        <button id="btnImportar" class="btn-info">📤 Importar JSON</button>
-        <button id="btnMesclar" class="btn-info">🔀 Mesclar p/ Base</button>
+        <button id="btnExportar" class="btn-info">📥 Backup JSON</button>
+        <button id="btnImportar" class="btn-info">📤 Restaurar JSON</button>
+        <button id="btnConfigNuvem" class="btn-info">⚙️ Nuvem</button>
         <input type="file" id="fileInput" accept=".json" style="display: none;">
     </div>
+    <div id="syncStatus" style="text-align:center;font-size:11px;color:#666;padding:4px;"></div>
 
     <div id="songBar">
-        <span class="tag" id="origemTag"></span>
         <button id="btnTransposeDown" class="btn-sm">Tom -1</button>
         <span id="transposeLabel" style="font-size:12px;color:#aaa;">0</span>
         <button id="btnTransposeUp" class="btn-sm">Tom +1</button>
@@ -274,14 +274,12 @@
 
     <script>
         // ===== Estrutura de dados =====
-        // bancoBase: carregado de repertorio.json (arquivo estático no repo, opcional)
-        // bancoLocal: cifras adicionadas/importadas pelo usuário, salvas no localStorage
+        // Acervo único (banco), sincronizado com a nuvem (JSONBin.io) + cache local pra funcionar offline.
         // cifra = { titulo, texto }
-        let bancoBase = [];
-        let bancoLocal = JSON.parse(localStorage.getItem('minhasCifras')) || [];
-        let listaCombinada = []; // [{titulo, texto, origem: 'base'|'local', idx: index no array de origem}]
-        let editandoIndexCombinado = null; // quando editando, guarda índice na listaCombinada
+        let banco = JSON.parse(localStorage.getItem('bancoCache')) || [];
+        let editandoIndex = null; // índice em `banco` sendo editado
         let transposeAtual = 0;
+        let cloudConfig = JSON.parse(localStorage.getItem('cloudConfig')) || null; // {binId, apiKey}
 
         const content = document.getElementById('content');
         const editorArea = document.getElementById('editorArea');
@@ -289,12 +287,12 @@
         const cifraSelector = document.getElementById('cifraSelector');
         const searchBox = document.getElementById('searchBox');
         const songBar = document.getElementById('songBar');
-        const origemTag = document.getElementById('origemTag');
         const btnEditar = document.getElementById('btnEditar');
         const btnExcluir = document.getElementById('btnExcluir');
         const btnTransposeUp = document.getElementById('btnTransposeUp');
         const btnTransposeDown = document.getElementById('btnTransposeDown');
         const transposeLabel = document.getElementById('transposeLabel');
+        const syncStatus = document.getElementById('syncStatus');
 
         const btnNovaCifra = document.getElementById('btnNovaCifra');
         const btnSalvarCifra = document.getElementById('btnSalvarCifra');
@@ -305,7 +303,7 @@
         const btnExportar = document.getElementById('btnExportar');
         const btnImportar = document.getElementById('btnImportar');
         const fileInput = document.getElementById('fileInput');
-        const btnMesclar = document.getElementById('btnMesclar');
+        const btnConfigNuvem = document.getElementById('btnConfigNuvem');
         const btnAcordes = document.getElementById('btnAcordes');
         const chordPanel = document.getElementById('chordPanel');
 
@@ -319,36 +317,108 @@
         let animationId;
         let wakeLock = null;
 
-        // ===== Carrega acervo base (opcional, se existir repertorio.json no mesmo diretório) =====
-        async function carregarBase() {
-            try {
-                const resp = await fetch('repertorio.json', { cache: 'no-store' });
-                if (resp.ok) {
-                    const dados = await resp.json();
-                    if (Array.isArray(dados)) bancoBase = dados;
-                }
-            } catch (e) {
-                // arquivo não existe ou não pôde ser carregado - segue só com o acervo local
-            }
-            montarListaCombinada();
+        // ===== Sincronização com a nuvem (JSONBin.io) =====
+        function statusMsg(texto, cor) {
+            syncStatus.textContent = texto;
+            syncStatus.style.color = cor || '#666';
         }
 
-        function montarListaCombinada() {
-            listaCombinada = [];
-            bancoBase.forEach((c, i) => listaCombinada.push({ titulo: c.titulo, texto: c.texto, origem: 'base', idx: i }));
-            bancoLocal.forEach((c, i) => listaCombinada.push({ titulo: c.titulo, texto: c.texto, origem: 'local', idx: i }));
-            listaCombinada.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+        async function carregarNuvem() {
+            if (!cloudConfig || !cloudConfig.binId || !cloudConfig.apiKey) {
+                statusMsg('☁️ Nuvem não configurada — usando apenas cópia local. Clique em "⚙️ Nuvem" pra ativar sincronização automática.', '#e0a800');
+                // primeira vez sem nada salvo: tenta puxar um repertorio.json estático, se existir
+                if (banco.length === 0) {
+                    try {
+                        const resp = await fetch('repertorio.json', { cache: 'no-store' });
+                        if (resp.ok) {
+                            const dados = await resp.json();
+                            if (Array.isArray(dados)) {
+                                banco = dados;
+                                localStorage.setItem('bancoCache', JSON.stringify(banco));
+                            }
+                        }
+                    } catch (e) { /* sem repertorio.json, tudo bem */ }
+                }
+                renderizarLista();
+                return;
+            }
+            statusMsg('⏳ Sincronizando...', '#aaa');
+            try {
+                const resp = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.binId}/latest`, {
+                    headers: { 'X-Master-Key': cloudConfig.apiKey }
+                });
+                if (!resp.ok) throw new Error('Falha ao buscar da nuvem');
+                const data = await resp.json();
+                const dados = data.record;
+                if (Array.isArray(dados)) {
+                    banco = dados;
+                    localStorage.setItem('bancoCache', JSON.stringify(banco));
+                    statusMsg('☁️ Sincronizado', '#28a745');
+                } else {
+                    throw new Error('Formato inesperado');
+                }
+            } catch (e) {
+                statusMsg('⚠️ Sem conexão com a nuvem — mostrando última cópia salva neste aparelho', '#dc3545');
+            }
             renderizarLista();
         }
 
+        async function salvarNuvem() {
+            localStorage.setItem('bancoCache', JSON.stringify(banco));
+            if (!cloudConfig || !cloudConfig.binId || !cloudConfig.apiKey) return;
+            statusMsg('⏳ Salvando na nuvem...', '#aaa');
+            try {
+                const resp = await fetch(`https://api.jsonbin.io/v3/b/${cloudConfig.binId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': cloudConfig.apiKey
+                    },
+                    body: JSON.stringify(banco)
+                });
+                if (!resp.ok) throw new Error('Falha ao salvar');
+                statusMsg('☁️ Sincronizado', '#28a745');
+            } catch (e) {
+                statusMsg('⚠️ Não foi possível salvar na nuvem agora (salvo só neste aparelho por enquanto)', '#dc3545');
+            }
+        }
+
+        btnConfigNuvem.addEventListener('click', () => {
+            const binIdAtual = cloudConfig ? cloudConfig.binId : '';
+            const apiKeyAtual = cloudConfig ? cloudConfig.apiKey : '';
+            const binId = prompt(
+                'Cole o Bin ID do jsonbin.io (crie uma conta grátis em jsonbin.io, faça um Bin novo com conteúdo [] e copie o ID):',
+                binIdAtual
+            );
+            if (binId === null) return;
+            const apiKey = prompt('Cole sua X-Master-Key do jsonbin.io (em "API Keys" no painel):', apiKeyAtual);
+            if (apiKey === null) return;
+            if (!binId.trim() || !apiKey.trim()) {
+                cloudConfig = null;
+                localStorage.removeItem('cloudConfig');
+                statusMsg('☁️ Nuvem desativada', '#666');
+                return;
+            }
+            cloudConfig = { binId: binId.trim(), apiKey: apiKey.trim() };
+            localStorage.setItem('cloudConfig', JSON.stringify(cloudConfig));
+            if (confirm('Configuração salva. Deseja enviar seu acervo atual (' + banco.length + ' cifra(s)) pra nuvem agora, sobrescrevendo o que estiver lá?')) {
+                salvarNuvem();
+            } else {
+                carregarNuvem();
+            }
+        });
+
         function renderizarLista(filtro = '') {
             const termo = filtro.trim().toLowerCase();
+            const ordenado = banco
+                .map((c, i) => ({ titulo: c.titulo, texto: c.texto, idx: i }))
+                .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
             cifraSelector.innerHTML = '<option value="" disabled selected>Selecione uma cifra...</option>';
-            listaCombinada.forEach((cifra, index) => {
+            ordenado.forEach((cifra) => {
                 if (termo && !cifra.titulo.toLowerCase().includes(termo)) return;
                 const option = document.createElement('option');
-                option.value = index;
-                option.textContent = cifra.titulo + (cifra.origem === 'local' ? ' (sua)' : '');
+                option.value = cifra.idx;
+                option.textContent = cifra.titulo;
                 cifraSelector.appendChild(option);
             });
         }
@@ -357,6 +427,7 @@
 
         // ===== Detecção e destaque de linhas de acorde =====
         const CHORD_TOKEN = /^[A-G](#|b)?(m|maj|min|dim|aug|sus|add)?[0-9]*(\/[A-G](#|b)?)?$/;
+
 
         function ehLinhaDeAcordes(linha) {
             const trimmed = linha.trim();
@@ -601,7 +672,7 @@
             const info = parseChordFull(chave);
             if (!info) return;
 
-            const cifraEscolhida = listaCombinada[cifraSelector.value];
+            const cifraEscolhida = banco[cifraSelector.value];
             if (!cifraEscolhida) return;
             const notaTransposta = transposeAtual !== 0 ? transporChord(info.nota, transposeAtual) : info.nota;
             const variacoes = getVariacoes(notaTransposta, info.sufixo);
@@ -619,7 +690,7 @@
         btnAcordes.addEventListener('click', () => {
             chordPanel.classList.toggle('show');
             if (chordPanel.classList.contains('show')) {
-                const cifraEscolhida = listaCombinada[cifraSelector.value];
+                const cifraEscolhida = banco[cifraSelector.value];
                 if (cifraEscolhida) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
             }
         });
@@ -641,7 +712,7 @@
 
         // ===== Seleção de música =====
         cifraSelector.addEventListener('change', (e) => {
-            const cifraEscolhida = listaCombinada[e.target.value];
+            const cifraEscolhida = banco[e.target.value];
             if (cifraEscolhida) {
                 transposeAtual = 0;
                 transposeLabel.textContent = '0';
@@ -651,9 +722,6 @@
                 editorArea.style.display = 'none';
                 content.style.display = 'block';
                 songBar.style.display = 'flex';
-                origemTag.textContent = cifraEscolhida.origem === 'base' ? 'Acervo base' : 'Sua cifra (editável)';
-                btnEditar.style.display = cifraEscolhida.origem === 'local' ? 'inline-block' : 'none';
-                btnExcluir.style.display = cifraEscolhida.origem === 'local' ? 'inline-block' : 'none';
                 if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, 0);
             }
         });
@@ -661,7 +729,7 @@
         btnTransposeUp.addEventListener('click', () => {
             transposeAtual++;
             transposeLabel.textContent = (transposeAtual > 0 ? '+' : '') + transposeAtual;
-            const cifraEscolhida = listaCombinada[cifraSelector.value];
+            const cifraEscolhida = banco[cifraSelector.value];
             if (cifraEscolhida) {
                 renderizarConteudo(cifraEscolhida.texto, transposeAtual);
                 if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
@@ -671,7 +739,7 @@
         btnTransposeDown.addEventListener('click', () => {
             transposeAtual--;
             transposeLabel.textContent = (transposeAtual > 0 ? '+' : '') + transposeAtual;
-            const cifraEscolhida = listaCombinada[cifraSelector.value];
+            const cifraEscolhida = banco[cifraSelector.value];
             if (cifraEscolhida) {
                 renderizarConteudo(cifraEscolhida.texto, transposeAtual);
                 if (chordPanel.classList.contains('show')) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
@@ -680,7 +748,7 @@
 
         // ===== Novo / Editar =====
         btnNovaCifra.addEventListener('click', () => {
-            editandoIndexCombinado = null;
+            editandoIndex = null;
             editorTitle.textContent = 'Adicionar Nova Cifra';
             novaTitulo.value = '';
             novaLetra.value = '';
@@ -692,9 +760,9 @@
 
         btnEditar.addEventListener('click', () => {
             const idx = parseInt(cifraSelector.value);
-            const cifra = listaCombinada[idx];
-            if (!cifra || cifra.origem !== 'local') return;
-            editandoIndexCombinado = idx;
+            const cifra = banco[idx];
+            if (!cifra) return;
+            editandoIndex = idx;
             editorTitle.textContent = 'Editar Cifra';
             novaTitulo.value = cifra.titulo;
             novaLetra.value = cifra.texto;
@@ -706,12 +774,12 @@
 
         btnExcluir.addEventListener('click', () => {
             const idx = parseInt(cifraSelector.value);
-            const cifra = listaCombinada[idx];
-            if (!cifra || cifra.origem !== 'local') return;
+            const cifra = banco[idx];
+            if (!cifra) return;
             if (!confirm('Excluir "' + cifra.titulo + '" do seu acervo?')) return;
-            bancoLocal.splice(cifra.idx, 1);
-            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
-            montarListaCombinada();
+            banco.splice(idx, 1);
+            renderizarLista();
+            salvarNuvem();
             content.textContent = 'Selecione uma música no menu acima ou adicione/importe novas cifras.';
             songBar.style.display = 'none';
         });
@@ -730,34 +798,33 @@
                 alert("Preencha o título e cole a cifra.");
                 return;
             }
-            if (editandoIndexCombinado !== null) {
-                const cifraOriginal = listaCombinada[editandoIndexCombinado];
-                bancoLocal[cifraOriginal.idx] = { titulo, texto };
+            if (editandoIndex !== null) {
+                banco[editandoIndex] = { titulo, texto };
             } else {
-                bancoLocal.push({ titulo, texto });
+                banco.push({ titulo, texto });
             }
-            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
             novaTitulo.value = '';
             novaLetra.value = '';
-            editandoIndexCombinado = null;
+            editandoIndex = null;
             editorArea.style.display = 'none';
             content.style.display = 'block';
-            montarListaCombinada();
+            renderizarLista();
+            salvarNuvem();
             // seleciona a cifra recém salva
-            const novoIndex = listaCombinada.findIndex(c => c.titulo === titulo && c.origem === 'local');
+            const novoIndex = banco.findIndex(c => c.titulo === titulo);
             if (novoIndex >= 0) {
                 cifraSelector.value = novoIndex;
                 cifraSelector.dispatchEvent(new Event('change'));
             }
         });
 
-        // ===== Exportar / Importar (apenas acervo local, o base fica no repo) =====
+        // ===== Backup / Restaurar (cópia manual, além da sincronização automática) =====
         btnExportar.addEventListener('click', () => {
-            if (bancoLocal.length === 0) {
-                alert("Seu acervo local está vazio. Adicione cifras antes de exportar.");
+            if (banco.length === 0) {
+                alert("Seu acervo está vazio. Adicione cifras antes de exportar.");
                 return;
             }
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bancoLocal, null, 4));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(banco, null, 4));
             const downloadAnchorNode = document.createElement('a');
             downloadAnchorNode.setAttribute("href", dataStr);
             downloadAnchorNode.setAttribute("download", "meu_acervo_cifras.json");
@@ -779,11 +846,11 @@
                 try {
                     const jsonImportado = JSON.parse(event.target.result);
                     if (Array.isArray(jsonImportado)) {
-                        if (confirm('Importar ' + jsonImportado.length + ' cifra(s)? Isso vai SUBSTITUIR seu acervo local atual (o acervo base não é afetado).')) {
-                            bancoLocal = jsonImportado;
-                            localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
-                            montarListaCombinada();
-                            alert("Acervo local importado com sucesso!");
+                        if (confirm('Importar ' + jsonImportado.length + ' cifra(s)? Isso vai SUBSTITUIR seu acervo atual (local e na nuvem, se configurada).')) {
+                            banco = jsonImportado;
+                            renderizarLista();
+                            salvarNuvem();
+                            alert("Acervo importado com sucesso!");
                         }
                     } else {
                         alert("Arquivo JSON inválido para este formato.");
@@ -794,37 +861,6 @@
             };
             reader.readAsText(file);
             e.target.value = '';
-        });
-
-        // ===== Mesclar acervo local no acervo base (gera novo repertorio.json p/ commit) =====
-        btnMesclar.addEventListener('click', () => {
-            if (bancoLocal.length === 0) {
-                alert("Seu acervo local está vazio, nada para mesclar.");
-                return;
-            }
-            const mesclado = bancoBase.concat(bancoLocal);
-            // remove duplicados por título (mantém a versão mais recente = a local, que vem depois)
-            const porTitulo = new Map();
-            mesclado.forEach(c => porTitulo.set(c.titulo, c));
-            const resultado = Array.from(porTitulo.values());
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(resultado, null, 4));
-            const a = document.createElement('a');
-            a.setAttribute("href", dataStr);
-            a.setAttribute("download", "repertorio.json");
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-
-            if (confirm('Arquivo "repertorio.json" baixado com ' + resultado.length + ' cifra(s).\n\n' +
-                'Substitua o repertorio.json no seu repositório do Vercel e faça o deploy.\n\n' +
-                'Deseja limpar o acervo local agora (já que ele foi incorporado ao base)?')) {
-                bancoLocal = [];
-                localStorage.setItem('minhasCifras', JSON.stringify(bancoLocal));
-                montarListaCombinada();
-                content.textContent = 'Selecione uma música no menu acima ou adicione/importe novas cifras.';
-                songBar.style.display = 'none';
-            }
         });
 
         // ===== Auto-scroll =====
@@ -917,7 +953,7 @@
             content.style.fontSize = e.target.value + 'px';
         });
 
-        carregarBase();
+        carregarNuvem();
     </script>
 </body>
 </html>
