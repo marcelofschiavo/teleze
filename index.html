@@ -1446,7 +1446,15 @@ fileInputLote.addEventListener('change', (e) => {
             { root: 2, rel: 0, name: 'Forma Dm', qual: 'm', frets: ['x', 'x', 0, 2, 3, 1] },
             { root: 2, rel: 0, name: 'Forma D7', qual: '7', frets: ['x', 'x', 0, 2, 1, 2] },
             { root: 2, rel: 0, name: 'Forma Dm7', qual: 'm7', frets: ['x', 'x', 0, 2, 1, 1] },
-            { root: 2, rel: 0, name: 'Forma D7M', qual: 'maj7', frets: ['x', 'x', 0, 2, 2, 2] }
+            { root: 2, rel: 0, name: 'Forma D7M', qual: 'maj7', frets: ['x', 'x', 0, 2, 2, 2] },
+
+            { root: 1, rel: 3, name: 'Forma C', qual: '', frets: ['x', 3, 2, 0, 1, 0] },
+            { root: 1, rel: 3, name: 'Forma C7', qual: '7', frets: ['x', 3, 2, 3, 1, 0] },
+            { root: 1, rel: 3, name: 'Forma C7M', qual: 'maj7', frets: ['x', 3, 2, 0, 0, 0] },
+
+            { root: 0, rel: 3, name: 'Forma G', qual: '', frets: [3, 2, 0, 0, 0, 3] },
+            { root: 0, rel: 3, name: 'Forma G7', qual: '7', frets: [3, 2, 0, 0, 0, 1] },
+            { root: 0, rel: 3, name: 'Forma G7M', qual: 'maj7', frets: [3, 2, 0, 0, 0, 2] }
         ];
 
         // ===== Funções utilitárias resgatadas =====
@@ -1468,12 +1476,18 @@ fileInputLote.addEventListener('change', (e) => {
             let s = sufixo.toLowerCase();
             // Mapeia todas as extensões malucas brasileiras para o núcleo harmônico da tríade/tétrade
             if (s.includes('m7b5') || s.includes('m7(b5)') || s.includes('m7(5-)')) return 'm7b5';
+            if (s.includes('dim7') || s.includes('dim7')) return 'dim';
             if (s.includes('dim') || s.includes('º') || s.includes('°')) return 'dim';
-            if (s.includes('maj7') || s.includes('7m')) return 'maj7'; 
+            if (s.includes('maj7') || s.includes('7m')) return 'maj7';
+            if (s.includes('m9') || s.includes('m11') || s.includes('m13')) return 'm7';
+            if (s.includes('m6')) return 'm';
             if (s.includes('m7')) return 'm7';
             if (s.includes('m') && !s.includes('maj') && !s.includes('7m')) return 'm';
+            if (s.includes('sus2')) return 'sus4';
             if (s.includes('sus')) return 'sus4';
-            if (s.includes('9')) return '9';
+            if (s.includes('add9') || s.includes('add2')) return '';
+            if (s.includes('6')) return '';
+            if (s.includes('9') || s.includes('11') || s.includes('13')) return '9';
             if (s.includes('7')) return '7';
             return '';
         }
