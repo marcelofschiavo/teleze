@@ -606,11 +606,7 @@
         <div id="importBox">
             <div id="importBoxTitle">📥 Importar de um site de cifras (CifraClub, Cifras, etc.)</div>
             <div id="importBoxSteps">
-                1. Arraste este link para a barra de favoritos do navegador:
-                <a href="javascript:..." id="btnBookmarklet">📎 Importar Cifra</a>
-                <br>2. Abra a música desejada no CifraClub ou Cifras e clique nesse favorito.
-                <br>3. Volte aqui e toque no botão abaixo.
-            </div>
+            
             <button type="button" id="btnColarClipboard" class="btn-info btn-sm">📋 Colar da área de transferência</button>
         </div>
         <input type="text" id="novaTitulo" placeholder="Digite o título da música">
@@ -883,7 +879,7 @@ fileInputLote.addEventListener('change', (e) => {
                 chordPopup.classList.remove('show');
             }
         });
-        
+
         async function carregarNuvem() {
             if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) {
                 statusMsg('☁️ Nuvem não configurada — usando apenas cópia local. Clique em "⚙️ Nuvem" pra ativar sincronização automática.', '#e0a800');
@@ -1725,6 +1721,8 @@ fileInputLote.addEventListener('change', (e) => {
                 }
             }
 
+            let contadorPartes = 1; // NOVO: Contador cronológico
+
             const html = linhasFinais.map(l => {
                 if (l.tipo === 'chord') {
                     const processada = l.texto.replace(/\S+/g, (tok) => {
@@ -1734,10 +1732,21 @@ fileInputLote.addEventListener('change', (e) => {
                     return '<span class="chord-line">' + processada + '</span>';
                 }
                 
-                // NOVO: Detecta se a linha é uma tag de seção ex: [Refrão], (Ponte), Intro:
+                // Detecta se a linha é uma tag de seção ex: [Refrão], (Ponte), Intro:
                 const textoTrimmed = l.texto.trim();
                 if (/^\[.+\]$|^\(.+\)$|^[A-Za-zÀ-ÿ]+:$/.test(textoTrimmed)) {
-                    return `<div class="song-section">${escapeHtml(textoTrimmed)}</div>`;
+                    let nomeTag = textoTrimmed;
+
+                    // INTERCEPTADOR: Se for uma tag de "Parte" confusa do CifraClub,
+                    // nós substituímos por uma ordem cronológica limpa.
+                    const regexPartes = /^[\[\(](?:primeira|segunda|terceira|quarta|quinta|sexta|sétima|setima|oitava|nona|décima|decima)?\s*parte\s*\d*[\]\)]$/i;
+                    
+                    if (regexPartes.test(nomeTag)) {
+                        nomeTag = `[Parte ${contadorPartes}]`;
+                        contadorPartes++;
+                    }
+
+                    return `<div class="song-section">${escapeHtml(nomeTag)}</div>`;
                 }
 
                 return escapeHtml(l.texto);
@@ -1907,13 +1916,24 @@ fileInputLote.addEventListener('change', (e) => {
                 return;
             }
 
+            // --- Lógica para cifra única ---
             const partes = texto.split('\n\n');
-            const titulo = partes[0].trim();
+            let titulo = partes[0].trim();
+            
+            // Limpeza agressiva de metadados inúteis copiados do CifraClub/Cifras
+            titulo = titulo.replace(/Cifra:\s*Principal.*/gi, '') // Remove "Cifra: Principal (violão e guitarra)..."
+                           .replace(/Favoritar Cifra.*/gi, '')    // Prevenção extra para o botão de favoritar
+                           .replace(/Tom:.*/gi, '')               // Remove a indicação de Tom grudada
+                           .replace(/Intro:.*/gi, '')             // Remove a introdução grudada
+                           .trim();
+
             const corpo = partes.slice(1).join('\n\n').trim();
+
             if (!titulo || !corpo) {
                 alert('Conteúdo da área de transferência não está no formato esperado (título + cifra, ou JSON em lote).');
                 return;
             }
+            
             novaTitulo.value = titulo;
             novaLetra.value = corpo;
         });
