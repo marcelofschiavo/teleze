@@ -499,6 +499,34 @@
             0% { transform: scale(0.8); opacity: 0.6; }
             100% { transform: scale(1.2); opacity: 1; }
         }
+
+        #importBox {
+            background: var(--bg-panel);
+            border: 1px dashed var(--border-input);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        #importBoxTitle {
+            font-weight: bold;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        #importBoxSteps {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        #btnBookmarklet {
+            display: inline-block;
+            background: var(--bg-input);
+            color: #17a2b8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-decoration: none;
+            border: 1px solid #17a2b8;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -575,8 +603,20 @@
 
     <div id="editorArea">
         <h2 id="editorTitle">Adicionar Nova Cifra</h2>
+        <div id="importBox">
+            <div id="importBoxTitle">📥 Importar de um site de cifras (CifraClub, Cifras, etc.)</div>
+            <div id="importBoxSteps">
+                1. Arraste este link para a barra de favoritos do navegador:
+                <a href="javascript:..." id="btnBookmarklet">📎 Importar Cifra</a>
+                <br>2. Abra a música desejada no CifraClub ou Cifras e clique nesse favorito.
+                <br>3. Volte aqui e toque no botão abaixo.
+            </div>
+            <button type="button" id="btnColarClipboard" class="btn-info btn-sm">📋 Colar da área de transferência</button>
+        </div>
         <input type="text" id="novaTitulo" placeholder="Digite o título da música">
         <textarea id="novaLetra" placeholder="Cole a cifra aqui..."></textarea>
+        
+        <!-- BOTÕES RESTAURADOS AQUI -->
         <div style="display: flex; gap: 10px;">
             <button id="btnSalvarCifra" class="btn-success">Salvar no Acervo</button>
             <button id="btnCancelar" class="btn-danger">Cancelar</button>
@@ -624,6 +664,7 @@
         const btnCancelar = document.getElementById('btnCancelar');
         const novaTitulo = document.getElementById('novaTitulo');
         const novaLetra = document.getElementById('novaLetra');
+        const btnColarClipboard = document.getElementById('btnColarClipboard');
 
         const btnExportar = document.getElementById('btnExportar');
         const btnImportar = document.getElementById('btnImportar');
@@ -836,6 +877,13 @@ fileInputLote.addEventListener('change', (e) => {
             } catch (e) { /* se falhar, fica órfão na conta, sem problema */ }
         }
 
+        // ===== Proteção contra Miss-click (Limpa a tela ao rolar) =====
+        window.addEventListener('scroll', () => {
+            if (chordPopup.classList.contains('show')) {
+                chordPopup.classList.remove('show');
+            }
+        });
+        
         async function carregarNuvem() {
             if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) {
                 statusMsg('☁️ Nuvem não configurada — usando apenas cópia local. Clique em "⚙️ Nuvem" pra ativar sincronização automática.', '#e0a800');
@@ -1802,6 +1850,75 @@ fileInputLote.addEventListener('change', (e) => {
             novaTitulo.value = '';
             novaLetra.value = '';
         });
+
+        // ===== Colar da área de transferência: aceita cifra única (bookmarklet) OU lote JSON =====
+        btnColarClipboard.addEventListener('click', async () => {
+            let texto;
+            try {
+                texto = await navigator.clipboard.readText();
+            } catch (err) {
+                alert('Não foi possível acessar a área de transferência. Permita o acesso e tente novamente.');
+                return;
+            }
+            if (!texto || !texto.trim()) {
+                alert('A área de transferência está vazia.');
+                return;
+            }
+
+            let possivelLote = null;
+            try {
+                const parsed = JSON.parse(texto);
+                if (Array.isArray(parsed) && parsed.every(c => c && typeof c.titulo === 'string' && typeof c.texto === 'string')) {
+                    possivelLote = parsed;
+                }
+            } catch (err) {
+                // não é JSON válido, segue fluxo normal de cifra única abaixo
+            }
+
+            if (possivelLote) {
+                const modo = prompt(
+                    'Encontradas ' + possivelLote.length + ' cifra(s) no JSON colado.\n\n' +
+                    'Digite "mesclar" para ADICIONAR ao acervo atual (substitui só as músicas com o mesmo título),\n' +
+                    'ou "substituir" para APAGAR tudo e usar somente as do JSON.',
+                    'mesclar'
+                );
+                if (modo === null) return;
+
+                if (modo.trim().toLowerCase().startsWith('sub')) {
+                    banco = possivelLote;
+                } else {
+                    const bancoAtualizado = [...banco];
+                    possivelLote.forEach(nova => {
+                        const idxExistente = bancoAtualizado.findIndex(c => c.titulo === nova.titulo);
+                        if (idxExistente >= 0) {
+                            bancoAtualizado[idxExistente] = nova;
+                        } else {
+                            bancoAtualizado.push(nova);
+                        }
+                    });
+                    banco = bancoAtualizado;
+                }
+
+                renderizarLista();
+                await salvarNuvem();
+                alert('Importação em lote concluída! Acervo agora tem ' + banco.length + ' cifra(s), sincronizado com a nuvem.');
+                editorArea.style.display = 'none';
+                content.style.display = 'block';
+                return;
+            }
+
+            const partes = texto.split('\n\n');
+            const titulo = partes[0].trim();
+            const corpo = partes.slice(1).join('\n\n').trim();
+            if (!titulo || !corpo) {
+                alert('Conteúdo da área de transferência não está no formato esperado (título + cifra, ou JSON em lote).');
+                return;
+            }
+            novaTitulo.value = titulo;
+            novaLetra.value = corpo;
+        });
+
+
 
         btnSalvarCifra.addEventListener('click', () => {
             const titulo = novaTitulo.value.trim();
