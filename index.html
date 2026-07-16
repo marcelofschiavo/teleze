@@ -179,7 +179,6 @@
             padding: 12px;
             max-height: 90vh;
             overflow-y: auto;
-            overflow-x: hidden;
             flex-wrap: wrap;
             gap: 12px;
         }
@@ -373,6 +372,7 @@
         <button id="btnAcordes" class="btn-sm btn-info">🎸 Acordes</button>
         <button id="btnZoomOut" class="btn-sm btn-zoom">🔍-</button>
         <button id="btnZoomIn" class="btn-sm btn-zoom">🔍+</button>
+        <button id="btnCompacto" class="btn-sm">🗜️ Compactar</button>
         <button id="btnEditar" class="btn-sm btn-warning">✏️ Editar</button>
         <button id="btnExcluir" class="btn-sm btn-danger">🗑️ Excluir</button>
     </div>
@@ -402,7 +402,7 @@
         </div>
         <div class="control-group">
             <label>Tam. Letra</label>
-            <input type="range" id="fontSize" min="16" max="80" value="24">
+            <input type="range" id="fontSize" min="8" max="80" value="24">
         </div>
     </div>
     <div id="wakeStatus"></div>
@@ -444,6 +444,7 @@
         const chordPopup = document.getElementById('chordPopup');
         const btnZoomIn = document.getElementById('btnZoomIn');
         const btnZoomOut = document.getElementById('btnZoomOut');
+        const btnCompacto = document.getElementById('btnCompacto');
         const btnTema = document.getElementById('btnTema');
         const btnMenu = document.getElementById('btnMenu');
         const menuExtra = document.getElementById('menuExtra');
@@ -1051,7 +1052,7 @@
             let html = '';
             tokens.forEach(tok => { html += boxAcordeHTML(tok, semitons, tomAtual); });
 
-            chordPanel.style.flexBasis = Math.max(180, 105 * escalaAcorde + 50) + 'px';
+            chordPanel.style.flexBasis = Math.max(180, 105 * escalaAcorde + 70) + 'px';
             chordPanel.innerHTML = selectorHtml + (html || '<div class="chord-diagram-box">Nenhum acorde detectado</div>');
         }
 
@@ -1063,6 +1064,15 @@
             tonsEscolhidos[cifraEscolhida.titulo] = e.target.value;
             localStorage.setItem('tonsEscolhidos', JSON.stringify(tonsEscolhidos));
             renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
+        });
+
+        // Fecha o popup ao clicar fora dele (registrado ANTES do listener de navegação de variação
+        // abaixo: precisa rodar primeiro, enquanto o elemento clicado ainda está no DOM — se rodasse
+        // depois, o innerHTML do popup já teria sido trocado pela navegação e o clique pareceria "fora")
+        document.addEventListener('click', (e) => {
+            if (!chordPopup.classList.contains('show')) return;
+            if (chordPopup.contains(e.target) || e.target.closest('.chord-tok')) return;
+            chordPopup.classList.remove('show');
         });
 
         // Navegação entre variações (delegação única, cobre painel lateral E popup individual)
@@ -1144,26 +1154,148 @@
         chordPopup.addEventListener('click', (e) => {
             if (e.target.id === 'btnFecharPopup') chordPopup.classList.remove('show');
         });
-        document.addEventListener('click', (e) => {
-            if (!chordPopup.classList.contains('show')) return;
-            if (chordPopup.contains(e.target) || e.target.closest('.chord-tok')) return;
-            chordPopup.classList.remove('show');
+
+        // ===== Quebra de linha sincronizada (acorde junto com a palavra correspondente) =====
+        // Mede a largura real de um caractere monoespaçado no tamanho de fonte atual,
+        // pra saber quantos caracteres cabem numa linha antes de quebrar.
+        function calcularMaxChars() {
+            const estilo = getComputedStyle(content);
+            const paddingH = parseFloat(estilo.paddingLeft || 0) + parseFloat(estilo.paddingRight || 0);
+            const larguraDisponivel = content.clientWidth - paddingH;
+            const probe = document.createElement('span');
+            probe.style.fontFamily = estilo.fontFamily;
+            probe.style.fontSize = estilo.fontSize;
+            probe.style.position = 'absolute';
+            probe.style.visibility = 'hidden';
+            probe.style.whiteSpace = 'pre';
+            probe.textContent = 'M'.repeat(50);
+            document.body.appendChild(probe);
+            const larguraChar = probe.getBoundingClientRect().width / 50;
+            document.body.removeChild(probe);
+            if (!larguraChar || larguraDisponivel <= 0) return 60;
+            return Math.max(10, Math.floor((larguraDisponivel / larguraChar) * 0.97));
+        }
+
+        function isSpaceAt(str, idx) {
+            if (idx >= str.length) return true; // além do fim da string conta como "vazio"
+            return str[idx] === ' ';
+        }
+
+        // Quebra um par (linha de acorde + linha de letra) mantendo as colunas alinhadas,
+        // sempre cortando num ponto onde NÃO há acorde (pra nunca partir um acorde ao meio).
+        function quebrarParDeLinhas(linhaAcorde, linhaLetra, maxChars) {
+            const total = Math.max(linhaAcorde.length, linhaLetra.length);
+            if (total <= maxChars) return [[linhaAcorde, linhaLetra]];
+            const resultado = [];
+            let pos = 0;
+            while (pos < total) {
+                let fim = Math.min(pos + maxChars, total);
+                if (fim < total) {
+                    const limite = pos + Math.max(1, Math.floor(maxChars * 0.4));
+                    // 1) melhor caso: ponto que é espaço em AMBAS as linhas (não corta acorde nem palavra)
+                    let corteIdeal = -1;
+                    for (let c = fim; c > limite; c--) {
+                        if (isSpaceAt(linhaAcorde, c) && isSpaceAt(linhaLetra, c)) { corteIdeal = c; break; }
+                    }
+                    if (corteIdeal > limite) {
+                        fim = corteIdeal;
+                    } else {
+                        // 2) senão, aceita espaço só na linha de acorde (nunca corta um acorde ao meio)
+                        let corte = fim;
+                        while (corte > limite && !isSpaceAt(linhaAcorde, corte)) corte--;
+                        if (corte > limite) fim = corte;
+                    }
+                }
+                resultado.push([linhaAcorde.slice(pos, fim), linhaLetra.slice(pos, fim)]);
+                pos = fim;
+                while (pos < total && isSpaceAt(linhaAcorde, pos) && isSpaceAt(linhaLetra, pos)) pos++;
+            }
+            return resultado;
+        }
+
+        // Quebra uma linha comum (sem par) respeitando limites de palavra
+        function quebrarLinhaSimples(linha, maxChars) {
+            if (linha.length <= maxChars) return [linha];
+            const palavras = linha.split(' ');
+            const resultado = [];
+            let atual = '';
+            palavras.forEach(p => {
+                if (atual === '') atual = p;
+                else if ((atual + ' ' + p).length <= maxChars) atual += ' ' + p;
+                else { resultado.push(atual); atual = p; }
+            });
+            if (atual) resultado.push(atual);
+            return resultado.length ? resultado : [linha];
+        }
+
+        // Modo compacto: remove linhas em branco pra aproveitar mais a tela
+        let modoCompacto = localStorage.getItem('modoCompacto') === '1';
+
+        function atualizarBotaoCompacto() {
+            btnCompacto.style.backgroundColor = modoCompacto ? '#28a745' : '';
+        }
+        atualizarBotaoCompacto();
+
+        btnCompacto.addEventListener('click', () => {
+            modoCompacto = !modoCompacto;
+            localStorage.setItem('modoCompacto', modoCompacto ? '1' : '0');
+            atualizarBotaoCompacto();
+            rerenderizarConteudoAtual();
         });
 
         function renderizarConteudo(texto, semitons) {
-            const linhas = texto.split('\n');
-            const html = linhas.map(linha => {
+            let linhasOriginais = texto.split('\n');
+            if (modoCompacto) {
+                linhasOriginais = linhasOriginais.filter(l => l.trim() !== '');
+            }
+            const maxChars = calcularMaxChars();
+            const linhasFinais = [];
+
+            for (let i = 0; i < linhasOriginais.length; i++) {
+                const linha = linhasOriginais[i];
                 if (ehLinhaDeAcordes(linha)) {
-                    const linhaProcessada = linha.replace(/\S+/g, (tok) => {
+                    const proxima = linhasOriginais[i + 1];
+                    const proximaEhAcorde = proxima !== undefined && ehLinhaDeAcordes(proxima);
+                    if (proxima !== undefined && !proximaEhAcorde && proxima.trim() !== '') {
+                        // par acorde + letra: quebra os dois juntos, mantendo alinhamento
+                        quebrarParDeLinhas(linha, proxima, maxChars).forEach(([ac, le]) => {
+                            linhasFinais.push({ tipo: 'chord', texto: ac });
+                            linhasFinais.push({ tipo: 'texto', texto: le });
+                        });
+                        i++; // já consumiu a linha de letra
+                    } else {
+                        // linha de acorde solta (ex: introdução instrumental)
+                        quebrarLinhaSimples(linha, maxChars).forEach(l => linhasFinais.push({ tipo: 'chord', texto: l }));
+                    }
+                } else {
+                    quebrarLinhaSimples(linha, maxChars).forEach(l => linhasFinais.push({ tipo: 'texto', texto: l }));
+                }
+            }
+
+            const html = linhasFinais.map(l => {
+                if (l.tipo === 'chord') {
+                    const processada = l.texto.replace(/\S+/g, (tok) => {
                         const transposto = semitons !== 0 ? transporChord(tok, semitons) : tok;
                         return `<span class="chord-tok" data-chord="${encodeURIComponent(tok)}">${escapeHtml(transposto)}</span>`;
                     });
-                    return '<span class="chord-line">' + linhaProcessada + '</span>';
+                    return '<span class="chord-line">' + processada + '</span>';
                 }
-                return escapeHtml(linha);
+                return escapeHtml(l.texto);
             }).join('\n');
             content.innerHTML = html;
         }
+
+        function rerenderizarConteudoAtual() {
+            const cifraEscolhida = banco[cifraSelector.value];
+            if (cifraEscolhida) renderizarConteudo(cifraEscolhida.texto, transposeAtual);
+        }
+
+        // Re-renderiza (recalculando a quebra de linha) quando o tamanho da tela muda
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(rerenderizarConteudoAtual, 200);
+        });
 
         // Clique num acorde dentro da letra abre o popup só daquele acorde
         content.addEventListener('click', (e) => {
@@ -1402,17 +1534,23 @@
             }
         });
 
-        // Toque na tela pausa e dá feedback visual (evita rolagem continuar sem perceber)
-        content.addEventListener('click', () => {
-            if (isPlaying) {
-                toggleBtn.click();
+        // Toque na tela alterna reprodução: pausa se estiver rolando, inicia se estiver parado.
+        // Toques num acorde (que abrem o popup) não mexem na reprodução.
+        content.addEventListener('click', (e) => {
+            if (e.target.closest('.chord-tok')) return;
+            if (editorArea.style.display === 'flex' || cifraSelector.value === "") return;
+            toggleBtn.click();
+            if (!isPlaying) {
                 tapFlash.classList.add('show');
                 setTimeout(() => tapFlash.classList.remove('show'), 1200);
             }
         });
 
+        let fontResizeTimeout;
         fontSizeInput.addEventListener('input', (e) => {
             content.style.fontSize = e.target.value + 'px';
+            clearTimeout(fontResizeTimeout);
+            fontResizeTimeout = setTimeout(rerenderizarConteudoAtual, 150);
         });
 
         carregarNuvem();
