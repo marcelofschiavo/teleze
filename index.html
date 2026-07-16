@@ -332,10 +332,19 @@
             text-align: center;
             font-size: 12px;
             color: var(--text-muted);
+            background: var(--bg-textarea); /* Fundo preenchido para separar os cards */
+            border: 1px solid var(--border-input); /* Borda visível */
+            border-radius: 8px; /* Arredondamento suave */
+            padding: 10px 4px; /* Respiro interno */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15); /* Sombra elegante */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
         }
 
         .chord-diagram-box svg {
-            background: var(--bg-diagram);
+            background: transparent; /* Removemos o fundo do SVG pois o card todo já tem cor */
             border-radius: 4px;
             max-width: 100%;
         }
@@ -738,16 +747,16 @@
         let wakeLock = null;
 
         const btnSoLetra = document.getElementById('btnSoLetra');
-        let mostrarSoLetra = localStorage.getItem('mostrarSoLetra') === '1';
-        btnSoLetra.checked = mostrarSoLetra;
+        // Força o padrão sempre desativado ao abrir a página, ignorando histórico
+        let mostrarSoLetra = false;
+        btnSoLetra.checked = false;
 
         btnSoLetra.addEventListener('change', () => {
             mostrarSoLetra = btnSoLetra.checked;
-            localStorage.setItem('mostrarSoLetra', mostrarSoLetra ? '1' : '0');
             
-            // UX inteligente: Se ativou "Só Letra", desliga o painel lateral de acordes pra limpar a tela
+            // UX inteligente: Se ativou "Só Letra", desliga o painel lateral de acordes
             if (mostrarSoLetra && btnAcordes.checked) {
-                btnAcordes.click(); // Simula o clique no botão de acordes para recolhê-lo
+                btnAcordes.click(); 
             }
             
             rerenderizarConteudoAtual();
@@ -940,11 +949,14 @@ fileInputLote.addEventListener('change', (e) => {
 
         // ===== Proteção contra Miss-click (Limpa a tela ao rolar) =====
         window.addEventListener('scroll', () => {
+            // Se o autoscroll estiver rodando, não fecha o popup!
+            if (isPlaying) return;
+
             if (chordPopup.classList.contains('show')) {
                 chordPopup.classList.remove('show');
             }
         });
-
+        
         // ===== Controle visual do Overlay de Loading =====
         const syncOverlay = document.getElementById('syncOverlay');
         const syncOverlayText = document.getElementById('syncOverlayText');
@@ -1149,15 +1161,15 @@ fileInputLote.addEventListener('change', (e) => {
         });
 
         // ===== Detecção e destaque de linhas de acorde =====
-        // RegEx atualizada para aceitar notação brasileira (7M, m7(b5), 9+, etc.)
-        const CHORD_TOKEN = /^[A-G](#|b)?(m|M|maj|min|dim|aug|sus|add|º)?\d{0,2}(m|M|maj|min|dim|aug|sus|add|º)?([#b\+\-]\d{1,2}|\d{1,2}[#b\+\-])?(\([^)]+\))?(\/[A-G](#|b)?)?$/;
+        // ===== Detecção e destaque de linhas de acorde =====
+        // RegEx atualizada para aceitar TANTO o ordinal (º) quanto o grau (°) em acordes diminutos
+        const CHORD_TOKEN = /^[A-G](#|b)?(m|M|maj|min|dim|aug|sus|add|º|°)?\d{0,2}(m|M|maj|min|dim|aug|sus|add|º|°)?([#b\+\-]\d{1,2}|\d{1,2}[#b\+\-])?(\([^)]+\))?(\/[A-G](#|b)?)?$/;
 
         function ehLinhaDeAcordes(linha) {
             const trimmed = linha.trim();
             if (!trimmed) return false;
             
-            // Remove tags estruturais (ex: [Solo], (Ponte), Intro:) ANTES de avaliar a linha.
-            // Isso impede que a palavra "Solo" suje a conta matemática dos acordes.
+            // Remove tags estruturais no início para não sujar a matemática dos acordes
             const linhaLimpa = trimmed.replace(/^\[.+?\]|^\(.+?\)|\b[A-Za-zÀ-ÿ]+:/g, '').trim();
             if (!linhaLimpa) return false;
 
@@ -1166,9 +1178,8 @@ fileInputLote.addEventListener('change', (e) => {
             
             const validos = tokens.filter(t => CHORD_TOKEN.test(t));
             
-            // Baixamos a exigência de 80% para 70% para dar mais margem de erro
-            // a cifras formatadas de forma "bagunçada" na internet.
-            return validos.length / tokens.length >= 0.7;
+            // Relaxamos a taxa de acerto para 65% para garantir estabilidade em linhas com muito lixo
+            return validos.length / tokens.length >= 0.65;
         }
 
         // ===== Detecção e ocultação de blocos de tablatura (diagramas de traste) =====
@@ -1277,98 +1288,126 @@ fileInputLote.addEventListener('change', (e) => {
             return acordePrincipal;
         }
 
-        // ===== Diagramas de acorde: variações (aberto, pestana em E, pestana em A) =====
-        // Convenção de cordas 6->1: E A D G B e (grave pra aguda)
-        const OPEN_SEMI = [4, 9, 2, 7, 11, 4]; // semitons de cada corda solta (C=0)
+        // ===== Diagramas de acorde: variações (Sistema CAGED) =====
+        const OPEN_SEMI = [4, 9, 2, 7, 11, 4]; // semitons de cada corda solta (6->1)
 
-        // Formatos abertos conhecidos (frets absolutos, -1 = corda presa/muda, 0 = corda solta)
+        // Formatos abertos conhecidos ('x' = corda muda)
         const OPEN_SHAPES = {
-            'C':     [-1, 3, 2, 0, 1, 0],
-            'Cmaj7': [-1, 3, 2, 0, 0, 0],
-            'C7':    [-1, 3, 2, 3, 1, 0],
-            'D':     [-1, -1, 0, 2, 3, 2],
-            'Dm':    [-1, -1, 0, 2, 3, 1],
-            'D7':    [-1, -1, 0, 2, 1, 2],
+            'C':     ['x', 3, 2, 0, 1, 0],
+            'Cmaj7': ['x', 3, 2, 0, 0, 0],
+            'C7M':   ['x', 3, 2, 0, 0, 0],
+            'C9':    ['x', 3, 2, 3, 3, 'x'],
+            'C7':    ['x', 3, 2, 3, 1, 0],
+            'D':     ['x', 'x', 0, 2, 3, 2],
+            'Dm':    ['x', 'x', 0, 2, 3, 1],
+            'D7':    ['x', 'x', 0, 2, 1, 2],
+            'Dmaj7': ['x', 'x', 0, 2, 2, 2],
+            'D7M':   ['x', 'x', 0, 2, 2, 2],
             'E':     [0, 2, 2, 1, 0, 0],
             'Em':    [0, 2, 2, 0, 0, 0],
             'E7':    [0, 2, 0, 1, 0, 0],
             'Emaj7': [0, 2, 1, 1, 0, 0],
+            'E7M':   [0, 2, 1, 1, 0, 0],
             'G':     [3, 2, 0, 0, 0, 3],
             'G7':    [3, 2, 0, 0, 0, 1],
-            'A':     [-1, 0, 2, 2, 2, 0],
-            'Am':    [-1, 0, 2, 2, 1, 0],
-            'Am7':   [-1, 0, 2, 0, 1, 0],
-            'Amaj7': [-1, 0, 2, 1, 2, 0],
-            'A7':    [-1, 0, 2, 0, 2, 0],
-            'B7':    [-1, 2, 1, 2, 0, 2]
+            'Gmaj7': [3, 2, 0, 0, 0, 2],
+            'G7M':   [3, 2, 0, 0, 0, 2],
+            'A':     ['x', 0, 2, 2, 2, 0],
+            'Am':    ['x', 0, 2, 2, 1, 0],
+            'Am7':   ['x', 0, 2, 0, 1, 0],
+            'Amaj7': ['x', 0, 2, 1, 2, 0],
+            'A7M':   ['x', 0, 2, 1, 2, 0],
+            'A7':    ['x', 0, 2, 0, 2, 0],
+            'B7':    ['x', 2, 1, 2, 0, 2]
         };
 
-        // Formatos de pestana (relativos à casa da pestana), 6->1
-        const BARRE_E = {
-            '':     [0, 2, 2, 1, 0, 0],
-            'm':    [0, 2, 2, 0, 0, 0],
-            '7':    [0, 2, 0, 1, 0, 0],
-            'm7':   [0, 2, 0, 0, 0, 0],
-            'maj7': [0, 2, 1, 1, 0, 0],
-            'sus4': [0, 2, 2, 2, 0, 0]
-        };
-        const BARRE_A = {
-            '':     [-1, 0, 2, 2, 2, 0],
-            'm':    [-1, 0, 2, 2, 1, 0],
-            '7':    [-1, 0, 2, 0, 2, 0],
-            'm7':   [-1, 0, 2, 0, 1, 0],
-            'maj7': [-1, 0, 2, 1, 2, 0],
-            'sus4': [-1, 0, 2, 2, 3, 0]
-        };
-        const APROXIMADO = new Set(['dim', 'aug', 'sus2', 'add9', '6', '9', 'm6']);
+        // Formatos Móveis (Shapes) de E, A e D com offset inteligente para notas complexas
+        const SHAPES = [
+            { root: 0, rel: 0, name: 'Forma E', qual: '', frets: [0, 2, 2, 1, 0, 0] },
+            { root: 0, rel: 0, name: 'Forma Em', qual: 'm', frets: [0, 2, 2, 0, 0, 0] },
+            { root: 0, rel: 0, name: 'Forma E7', qual: '7', frets: [0, 2, 0, 1, 0, 0] },
+            { root: 0, rel: 0, name: 'Forma Em7', qual: 'm7', frets: [0, 2, 0, 0, 0, 0] },
+            { root: 0, rel: 0, name: 'Forma E7M', qual: 'maj7', frets: [0, 'x', 1, 1, 0, 'x'] },
+            { root: 0, rel: 0, name: 'Forma Esus', qual: 'sus4', frets: [0, 2, 2, 2, 0, 0] },
+            { root: 0, rel: 1, name: 'Forma Em7b5', qual: 'm7b5', frets: [1, 'x', 1, 1, 0, 'x'] },
+            { root: 0, rel: 1, name: 'Forma Edim', qual: 'dim', frets: [1, 'x', 0, 1, 0, 'x'] },
+            
+            { root: 1, rel: 0, name: 'Forma A', qual: '', frets: ['x', 0, 2, 2, 2, 0] },
+            { root: 1, rel: 0, name: 'Forma Am', qual: 'm', frets: ['x', 0, 2, 2, 1, 0] },
+            { root: 1, rel: 0, name: 'Forma A7', qual: '7', frets: ['x', 0, 2, 0, 2, 0] },
+            { root: 1, rel: 0, name: 'Forma Am7', qual: 'm7', frets: ['x', 0, 2, 0, 1, 0] },
+            { root: 1, rel: 0, name: 'Forma A7M', qual: 'maj7', frets: ['x', 0, 2, 1, 2, 0] },
+            { root: 1, rel: 0, name: 'Forma Asus', qual: 'sus4', frets: ['x', 0, 2, 2, 3, 0] },
+            { root: 1, rel: 0, name: 'Forma Am7b5', qual: 'm7b5', frets: ['x', 0, 1, 0, 1, 'x'] },
+            { root: 1, rel: 1, name: 'Forma Adim', qual: 'dim', frets: ['x', 1, 2, 0, 2, 'x'] },
+            { root: 1, rel: 1, name: 'Forma A9', qual: '9', frets: ['x', 1, 0, 1, 1, 1] },
+            
+            { root: 2, rel: 0, name: 'Forma D', qual: '', frets: ['x', 'x', 0, 2, 3, 2] },
+            { root: 2, rel: 0, name: 'Forma Dm', qual: 'm', frets: ['x', 'x', 0, 2, 3, 1] },
+            { root: 2, rel: 0, name: 'Forma D7', qual: '7', frets: ['x', 'x', 0, 2, 1, 2] },
+            { root: 2, rel: 0, name: 'Forma Dm7', qual: 'm7', frets: ['x', 'x', 0, 2, 1, 1] },
+            { root: 2, rel: 0, name: 'Forma D7M', qual: 'maj7', frets: ['x', 'x', 0, 2, 2, 2] }
+        ];
 
         function normalizarQualidade(sufixo) {
-            if (sufixo in BARRE_E) return sufixo;
-            if (sufixo.startsWith('m') && !sufixo.startsWith('maj')) return 'm';
+            let s = sufixo.toLowerCase();
+            // Mapeia todas as extensões malucas brasileiras para o núcleo harmônico da tríade/tétrade
+            if (s.includes('m7b5') || s.includes('m7(b5)') || s.includes('m7(5-)')) return 'm7b5';
+            if (s.includes('dim') || s.includes('º') || s.includes('°')) return 'dim';
+            if (s.includes('maj7') || s.includes('7m')) return 'maj7'; 
+            if (s.includes('m7')) return 'm7';
+            if (s.includes('m') && !s.includes('maj') && !s.includes('7m')) return 'm';
+            if (s.includes('sus')) return 'sus4';
+            if (s.includes('9')) return '9';
+            if (s.includes('7')) return '7';
             return '';
         }
 
-        function parseChordFull(token) {
-            const m = token.match(/^([A-G])(#|b)?([^\/]*)/);
-            if (!m) return null;
-            const [, letra, acidente, sufixo] = m;
-            return { nota: letra + (acidente || ''), sufixo: sufixo || '' };
-        }
-
-        function notaDaCorda(stringIdx, fretAbs) {
-            if (fretAbs < 0) return 'x';
-            const idx = (OPEN_SEMI[stringIdx] + fretAbs) % 12;
-            return NOTAS_SUSTENIDO[idx];
-        }
-
-        // Monta a lista de variações disponíveis pra um acorde (nota + sufixo)
         function getVariacoes(nota, sufixo) {
             const variacoes = [];
             const nomeCompleto = nota + sufixo;
-            const aproximado = !(sufixo in BARRE_E);
             const qualidadeReal = normalizarQualidade(sufixo);
+            const aproximado = (sufixo !== '' && qualidadeReal === ''); 
 
-            // 1) Aberto (se existir formato exato pra essa nota+sufixo)
+            // 1. Busca primeiro nas formas abertas cravadas
             if (OPEN_SHAPES[nomeCompleto]) {
                 variacoes.push({ tipo: 'Aberto', frets: OPEN_SHAPES[nomeCompleto], start: 0, aproximado: false, raiz: nota });
             }
 
-            let idx = NOTAS_SUSTENIDO.indexOf(nota);
-            if (idx === -1) idx = NOTAS_BEMOL.indexOf(nota);
-            if (idx === -1) idx = 0;
+            const notaPc = indiceNota(nota);
+            if (notaPc === -1) return variacoes;
 
-            // 2) Pestana com base no formato de E
-            const fretE = (idx - 4 + 12) % 12;
-            const shapeE = BARRE_E[qualidadeReal];
-            const fretsE = shapeE.map(rel => rel < 0 ? -1 : fretE + rel);
-            variacoes.push({ tipo: fretE === 0 ? 'Aberto (E)' : 'Pestana (base E)', frets: fretsE, start: fretE, aproximado, raiz: nota });
+            // 2. Calcula as posições relativas baseadas nos 3 shapes móveis
+            SHAPES.forEach(shape => {
+                if (shape.qual === qualidadeReal || (shape.qual === '' && aproximado && qualidadeReal !== 'm' && qualidadeReal !== 'dim')) {
+                    const stringOpenPc = OPEN_SEMI[shape.root];
+                    let rootFret = (notaPc - stringOpenPc + 12) % 12;
+                    if (rootFret === 0 && shape.name !== 'Forma E') rootFret += 12;
+                    
+                    const visualStart = rootFret - shape.rel;
+                    // Se o acorde cair fora do braço ou for inalcançável, ignora
+                    if (visualStart < 0 || visualStart > 12) return;
 
-            // 3) Pestana com base no formato de A
-            const fretA = (idx - 9 + 12) % 12;
-            const shapeA = BARRE_A[qualidadeReal];
-            const fretsA = shapeA.map(rel => rel < 0 ? -1 : fretA + rel);
-            variacoes.push({ tipo: fretA === 0 ? 'Aberto (A)' : 'Pestana (base A)', frets: fretsA, start: fretA, aproximado, raiz: nota });
+                    const absFrets = shape.frets.map(f => f === 'x' ? 'x' : visualStart + f);
+                    
+                    // Previne de sugerir um shape móvel que é idêntico ao aberto já listado
+                    const isDuplicate = variacoes.some(v => v.frets.join(',') === absFrets.join(','));
+                    if (!isDuplicate) {
+                         variacoes.push({
+                             tipo: visualStart === 0 ? 'Aberto' : shape.name,
+                             frets: absFrets,
+                             start: visualStart, 
+                             aproximado: (shape.qual !== sufixo && shape.qual === ''),
+                             raiz: nota
+                         });
+                    }
+                }
+            });
 
+            if (variacoes.length === 0) {
+                // Fallback seguro de emergência
+                variacoes.push({ tipo: 'Aprox', frets: [0,2,2,1,0,0].map(f => f + ((notaPc - 4 + 12)%12)), start: (notaPc - 4 + 12)%12, aproximado: true, raiz: nota });
+            }
             return variacoes;
         }
 
@@ -1399,8 +1438,7 @@ fileInputLote.addEventListener('change', (e) => {
                 svg += `<line x1="${margin}" y1="${y}" x2="${margin + 5 * stringGap}" y2="${y}" stroke="#888" stroke-width="${espessura}"/>`;
             }
 
-            // Pestana visual quando há mais de uma corda no mesmo fret inicial (barra real)
-            const naPosicaoInicial = frets.filter(f => f === start).length;
+            const naPosicaoInicial = frets.filter(f => f === start && start > 0).length;
             const temBarra = start > 0 && naPosicaoInicial >= 2;
             if (temBarra) {
                 const yBarra = margin + fretGap * 0.5;
@@ -1409,28 +1447,33 @@ fileInputLote.addEventListener('change', (e) => {
 
             frets.forEach((fretAbs, sIdx) => {
                 const x = margin + sIdx * stringGap;
-                if (fretAbs < 0) {
-                    svg += `<text x="${x}" y="${margin - 8}" font-size="11" fill="#dc3545" text-anchor="middle">x</text>`;
+                
+                // Trata as cordas que não devem ser tocadas ('x')
+                if (fretAbs === 'x') {
+                    svg += `<text x="${x}" y="${margin - 8}" font-size="11" fill="#dc3545" text-anchor="middle" font-weight="bold">x</text>`;
                     return;
                 }
+                
                 const nota = notaDaCorda(sIdx, fretAbs);
                 const notaPc = indiceNota(nota);
                 const funcaoNota = (raizPc !== -1 && notaPc !== -1) ? FUNCOES_INTERVALO[(notaPc - raizPc + 12) % 12] : '';
 
                 if (start === 0 && fretAbs === 0) {
-                    // corda solta
                     svg += `<circle cx="${x}" cy="${margin - 11}" r="9" fill="none" stroke="#28a745" stroke-width="1.5"/>`;
                     svg += `<text x="${x}" y="${margin - 13}" font-size="7" fill="#28a745" text-anchor="middle" font-weight="bold">${nota}</text>`;
                     svg += `<text x="${x}" y="${margin - 4}" font-size="6" fill="#28a745" text-anchor="middle">${funcaoNota}</text>`;
                     return;
                 }
-                if (temBarra && fretAbs === start) {
-                    // coberta pela pestana - mostra nome da nota + função sobre a barra
+                
+                let relPos = fretAbs;
+                if (start > 0) relPos = fretAbs - start + 1;
+
+                if (temBarra && relPos === 1) {
                     const yB = margin + fretGap * 0.5;
                     svg += `<text x="${x}" y="${yB + 3}" font-size="7" fill="#3a2a00" text-anchor="middle" font-weight="bold">${nota}<tspan font-size="5" dx="1">${funcaoNota}</tspan></text>`;
                     return;
                 }
-                const relPos = fretAbs - start;
+                
                 const y = margin + (relPos - 0.5) * fretGap;
                 svg += `<circle cx="${x}" cy="${y}" r="9" fill="#ffb300"/>`;
                 svg += `<text x="${x}" y="${y - 1}" font-size="7" fill="#2a1e00" text-anchor="middle" font-weight="bold">${nota}</text>`;
@@ -1859,18 +1902,22 @@ fileInputLote.addEventListener('change', (e) => {
             const html = linhasFinais.map(l => {
                 if (l.tipo === 'chord') {
                     const processada = l.texto.replace(/\S+/g, (tok) => {
+                        // NOVO: Se for uma tag colada na mesma linha do acorde, renderiza como badge!
+                        if (/^\[.+\]$|^\(.+\)$|^[A-Za-zÀ-ÿ]+:$/.test(tok)) {
+                            return `<span class="song-section" style="margin-top:0; padding:2px 6px; font-size:16px; vertical-align: middle;">${escapeHtml(tok)}</span>`;
+                        }
                         const transposto = semitons !== 0 ? transporChord(tok, semitons) : tok;
                         return `<span class="chord-tok" data-chord="${encodeURIComponent(tok)}">${escapeHtml(transposto)}</span>`;
                     });
                     return '<span class="chord-line">' + processada + '</span>';
                 }
                 
-                // Detecta se a linha é uma tag de seção ex: [Refrão], (Ponte), Intro:
+                // Detecta se a linha de texto é uma tag de seção (ex: [Refrão], Intro:)
                 const textoTrimmed = l.texto.trim();
                 if (/^\[.+\]$|^\(.+\)$|^[A-Za-zÀ-ÿ]+:$/.test(textoTrimmed)) {
                     let nomeTag = textoTrimmed;
 
-                    // INTERCEPTADOR: Se for uma tag de "Parte" do CifraClub, forçamos ordem cronológica
+                    // INTERCEPTADOR de partes
                     const regexPartes = /^[\[\(](?:primeira|segunda|terceira|quarta|quinta|sexta|sétima|setima|oitava|nona|décima|decima)?\s*parte\s*\d*[\]\)]$/i;
                     
                     if (regexPartes.test(nomeTag)) {
@@ -1886,7 +1933,7 @@ fileInputLote.addEventListener('change', (e) => {
             
             content.innerHTML = html;
         }
-        
+
         function rerenderizarConteudoAtual() {
             const cifraEscolhida = banco[cifraSelector.value];
             if (cifraEscolhida) renderizarConteudo(cifraEscolhida.texto, transposeAtual);
