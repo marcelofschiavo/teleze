@@ -83,6 +83,46 @@
             max-width: 260px;
         }
 
+        #searchWrap {
+            position: relative;
+            display: inline-block;
+        }
+        #searchResults {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            max-height: 260px;
+            overflow-y: auto;
+            background: var(--bg-header);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+            z-index: 150;
+        }
+        #searchResults.show { display: block; }
+        #searchResults .search-result-item {
+            padding: 10px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #searchResults .search-result-item:last-child { border-bottom: none; }
+        #searchResults .search-result-item:hover,
+        #searchResults .search-result-item.active {
+            background: var(--bg-input);
+        }
+        #searchResults .search-result-empty {
+            padding: 10px 12px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
         select, input[type="text"] {
             padding: 10px;
             font-size: 16px;
@@ -206,7 +246,33 @@
             font-size: 13px;
             margin-left: 4px;
         }
-        .btn-zoom { padding: 3px 8px; font-size: 12px; }
+        .btn-zoom { padding: 3px 8px; font-size: 12px; font-weight: bold; }
+
+        #acordesGroup {
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        #acordesGroup #btnAcordes {
+            border-radius: 6px 0 0 6px;
+        }
+        #zoomGroup {
+            display: none;
+            align-items: center;
+            border: 1px solid var(--text-faint2, #555);
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            overflow: hidden;
+        }
+        #zoomGroup.show { display: inline-flex; }
+        #zoomGroup .btn-zoom {
+            border-radius: 0;
+            border: none;
+            border-left: 1px solid rgba(255,255,255,0.15);
+        }
+        #zoomGroup .btn-zoom:first-child { border-left: none; }
 
         .chord-diagram-box {
             width: 100%;
@@ -349,7 +415,10 @@
     <div id="tapFlash">Pausado (toque na tela)</div>
 
     <div id="header">
-        <input type="text" id="searchBox" placeholder="🔍 Buscar cifra...">
+        <div id="searchWrap">
+            <input type="text" id="searchBox" placeholder="🔍 Buscar cifra...">
+            <div id="searchResults"></div>
+        </div>
         <select id="cifraSelector">
             <option value="" disabled selected>Selecione uma cifra...</option>
         </select>
@@ -369,9 +438,13 @@
         <button id="btnTransposeDown" class="btn-sm">Tom -1</button>
         <span id="transposeLabel" style="font-size:12px;color:#aaa;">0</span>
         <button id="btnTransposeUp" class="btn-sm">Tom +1</button>
-        <button id="btnAcordes" class="btn-sm btn-info">🎸 Acordes</button>
-        <button id="btnZoomOut" class="btn-sm btn-zoom">🔍-</button>
-        <button id="btnZoomIn" class="btn-sm btn-zoom">🔍+</button>
+        <div id="acordesGroup">
+            <button id="btnAcordes" class="btn-sm btn-info">🎸 Acordes</button>
+            <span id="zoomGroup">
+                <button id="btnZoomOut" class="btn-sm btn-zoom" title="Diminuir diagrama">−</button>
+                <button id="btnZoomIn" class="btn-sm btn-zoom" title="Aumentar diagrama">+</button>
+            </span>
+        </div>
         <button id="btnCompacto" class="btn-sm">🗜️ Compactar</button>
         <button id="btnEditar" class="btn-sm btn-warning">✏️ Editar</button>
         <button id="btnExcluir" class="btn-sm btn-danger">🗑️ Excluir</button>
@@ -421,6 +494,7 @@
         const editorTitle = document.getElementById('editorTitle');
         const cifraSelector = document.getElementById('cifraSelector');
         const searchBox = document.getElementById('searchBox');
+        const searchResults = document.getElementById('searchResults');
         const songBar = document.getElementById('songBar');
         const btnEditar = document.getElementById('btnEditar');
         const btnExcluir = document.getElementById('btnExcluir');
@@ -444,6 +518,7 @@
         const chordPopup = document.getElementById('chordPopup');
         const btnZoomIn = document.getElementById('btnZoomIn');
         const btnZoomOut = document.getElementById('btnZoomOut');
+        const zoomGroup = document.getElementById('zoomGroup');
         const btnCompacto = document.getElementById('btnCompacto');
         const btnTema = document.getElementById('btnTema');
         const btnMenu = document.getElementById('btnMenu');
@@ -680,10 +755,56 @@
             });
         }
 
-        searchBox.addEventListener('input', (e) => renderizarLista(e.target.value));
+        searchBox.addEventListener('input', (e) => {
+            renderizarLista(e.target.value);
+            renderizarResultadosBusca(e.target.value);
+        });
+
+        function renderizarResultadosBusca(filtro = '') {
+            const termo = filtro.trim().toLowerCase();
+            if (!termo) {
+                searchResults.classList.remove('show');
+                searchResults.innerHTML = '';
+                return;
+            }
+            const encontrados = banco
+                .map((c, i) => ({ titulo: c.titulo, idx: i }))
+                .filter(c => c.titulo.toLowerCase().includes(termo))
+                .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+
+            if (encontrados.length === 0) {
+                searchResults.innerHTML = '<div class="search-result-empty">Nenhuma cifra encontrada</div>';
+            } else {
+                searchResults.innerHTML = encontrados.map(c =>
+                    `<div class="search-result-item" data-idx="${c.idx}">${escapeHtml(c.titulo)}</div>`
+                ).join('');
+            }
+            searchResults.classList.add('show');
+        }
+
+        searchResults.addEventListener('click', (e) => {
+            const item = e.target.closest('.search-result-item[data-idx]');
+            if (!item) return;
+            cifraSelector.value = item.dataset.idx;
+            cifraSelector.dispatchEvent(new Event('change'));
+            searchBox.value = '';
+            renderizarLista('');
+            searchResults.classList.remove('show');
+            searchResults.innerHTML = '';
+        });
+
+        searchBox.addEventListener('focus', () => {
+            if (searchBox.value.trim()) renderizarResultadosBusca(searchBox.value);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchResults.classList.contains('show')) return;
+            if (e.target === searchBox || searchResults.contains(e.target)) return;
+            searchResults.classList.remove('show');
+        });
 
         // ===== Detecção e destaque de linhas de acorde =====
-        const CHORD_TOKEN = /^[A-G](#|b)?(m|maj|min|dim|aug|sus|add)?[0-9]*(\/[A-G](#|b)?)?$/;
+        const CHORD_TOKEN = /^[A-G](#|b)?(maj|min|mM|dim|aug|sus|add|m)?\d{0,2}([#b]\d{1,2})?(\(\s*[#b]?\d{1,2}(\s*,\s*[#b]?\d{1,2})*\s*\))?(\/[A-G](#|b)?)?$/;
 
 
         function ehLinhaDeAcordes(linha) {
@@ -1072,6 +1193,7 @@
         document.addEventListener('click', (e) => {
             if (!chordPopup.classList.contains('show')) return;
             if (chordPopup.contains(e.target) || e.target.closest('.chord-tok')) return;
+            if (e.target.closest('#btnZoomIn') || e.target.closest('#btnZoomOut')) return;
             chordPopup.classList.remove('show');
         });
 
@@ -1105,6 +1227,7 @@
 
         btnAcordes.addEventListener('click', () => {
             chordPanel.classList.toggle('show');
+            zoomGroup.classList.toggle('show', chordPanel.classList.contains('show'));
             if (chordPanel.classList.contains('show')) {
                 const cifraEscolhida = banco[cifraSelector.value];
                 if (cifraEscolhida) renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
@@ -1348,6 +1471,9 @@
             novaLetra.value = '';
             content.style.display = 'none';
             songBar.style.display = 'none';
+            chordPanel.classList.remove('show');
+            chordPopup.classList.remove('show');
+            zoomGroup.classList.remove('show');
             editorArea.style.display = 'flex';
             if (isPlaying) toggleBtn.click();
         });
@@ -1362,6 +1488,9 @@
             novaLetra.value = cifra.texto;
             content.style.display = 'none';
             songBar.style.display = 'none';
+            chordPanel.classList.remove('show');
+            chordPopup.classList.remove('show');
+            zoomGroup.classList.remove('show');
             editorArea.style.display = 'flex';
             if (isPlaying) toggleBtn.click();
         });
