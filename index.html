@@ -5,22 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teleprompter de Cifras</title>
     <style>
+        :root {
+            --bg: #121212;
+            --bg-header: #1e1e1e;
+            --bg-panel: #1a1a1a;
+            --bg-songbar: #181818;
+            --bg-input: #333;
+            --bg-textarea: #2a2a2a;
+            --bg-diagram: #222;
+            --text: #e0e0e0;
+            --text-muted: #aaa;
+            --text-faint: #888;
+            --text-faint2: #666;
+            --border: #333;
+            --border-input: #555;
+            --chord-color: #ffb300;
+        }
+
+        body.light-theme {
+            --bg: #f5f5f2;
+            --bg-header: #ffffff;
+            --bg-panel: #ffffff;
+            --bg-songbar: #eeeeea;
+            --bg-input: #ffffff;
+            --bg-textarea: #ffffff;
+            --bg-diagram: #f0f0ec;
+            --text: #1a1a1a;
+            --text-muted: #555;
+            --text-faint: #777;
+            --text-faint2: #888;
+            --border: #ddd;
+            --border-input: #ccc;
+            --chord-color: #b36b00;
+        }
+
         body {
             margin: 0;
-            background-color: #121212;
-            color: #e0e0e0;
+            background-color: var(--bg);
+            color: var(--text);
             font-family: sans-serif;
             padding-bottom: 130px;
+            transition: background-color 0.2s, color 0.2s;
         }
 
         #header {
-            background: #1e1e1e;
+            background: var(--bg-header);
             padding: 15px;
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 10px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--border);
             flex-wrap: wrap;
         }
 
@@ -32,9 +67,9 @@
         select, input[type="text"] {
             padding: 10px;
             font-size: 16px;
-            background: #333;
-            color: white;
-            border: 1px solid #555;
+            background: var(--bg-input);
+            color: var(--text);
+            border: 1px solid var(--border-input);
             border-radius: 5px;
         }
 
@@ -68,14 +103,14 @@
             justify-content: center;
             gap: 10px;
             padding: 10px;
-            background: #181818;
+            background: var(--bg-songbar);
             flex-wrap: wrap;
             align-items: center;
         }
 
         #songBar .tag {
             font-size: 12px;
-            color: #888;
+            color: var(--text-faint);
         }
 
         #mainArea {
@@ -99,7 +134,7 @@
         }
 
         .chord-line {
-            color: #ffb300;
+            color: var(--chord-color);
             font-weight: bold;
         }
 
@@ -108,8 +143,8 @@
             flex: 0 0 180px;
             position: sticky;
             top: 15px;
-            background: #1a1a1a;
-            border: 1px solid #333;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 12px;
             max-height: 90vh;
@@ -120,16 +155,44 @@
 
         #chordPanel.show { display: flex; }
 
+        #tomSelectorBox {
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 4px;
+        }
+        #tomSelector {
+            width: auto;
+            max-width: none;
+            padding: 4px 6px;
+            font-size: 13px;
+            margin-left: 4px;
+        }
+
         .chord-diagram-box {
             width: 100%;
             text-align: center;
             font-size: 12px;
-            color: #ccc;
+            color: var(--text-muted);
         }
 
         .chord-diagram-box svg {
-            background: #222;
+            background: var(--bg-diagram);
             border-radius: 4px;
+        }
+
+        .funcao-label {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: bold;
+            color: #222;
+            background: var(--chord-color);
+            border-radius: 8px;
+            padding: 1px 6px;
+            margin-left: 4px;
         }
 
         @media (max-width: 800px) {
@@ -172,9 +235,9 @@
         #novaLetra {
             width: 100%;
             height: 60vh;
-            background: #2a2a2a;
-            color: white;
-            border: 1px solid #555;
+            background: var(--bg-textarea);
+            color: var(--text);
+            border: 1px solid var(--border-input);
             border-radius: 5px;
             padding: 15px;
             font-family: 'Courier New', Courier, monospace;
@@ -189,12 +252,12 @@
         #controls {
             position: fixed;
             bottom: 0; left: 0; right: 0;
-            background: #1e1e1e;
+            background: var(--bg-header);
             padding: 15px;
             display: flex;
             justify-content: center;
             gap: 20px;
-            border-top: 1px solid #333;
+            border-top: 1px solid var(--border);
             z-index: 100;
             flex-wrap: wrap;
         }
@@ -205,14 +268,14 @@
             align-items: center;
             gap: 5px;
             font-size: 12px;
-            color: #aaa;
+            color: var(--text-muted);
         }
 
         input[type=range] { width: 130px; }
 
         #wakeStatus {
             font-size: 11px;
-            color: #666;
+            color: var(--text-faint2);
             text-align: center;
             padding: 4px;
         }
@@ -231,6 +294,7 @@
         <button id="btnExportar" class="btn-info">📥 Backup JSON</button>
         <button id="btnImportar" class="btn-info">📤 Restaurar JSON</button>
         <button id="btnConfigNuvem" class="btn-info">⚙️ Nuvem</button>
+        <button id="btnTema" class="btn-sm">🌙</button>
         <input type="file" id="fileInput" accept=".json" style="display: none;">
     </div>
     <div id="syncStatus" style="text-align:center;font-size:11px;color:#666;padding:4px;"></div>
@@ -306,6 +370,7 @@
         const btnConfigNuvem = document.getElementById('btnConfigNuvem');
         const btnAcordes = document.getElementById('btnAcordes');
         const chordPanel = document.getElementById('chordPanel');
+        const btnTema = document.getElementById('btnTema');
 
         const toggleBtn = document.getElementById('toggleBtn');
         const speedInput = document.getElementById('speed');
@@ -316,6 +381,19 @@
         let isPlaying = false;
         let animationId;
         let wakeLock = null;
+
+        // ===== Tema claro/escuro =====
+        function aplicarTema(tema) {
+            document.body.classList.toggle('light-theme', tema === 'light');
+            btnTema.textContent = tema === 'light' ? '☀️' : '🌙';
+        }
+        let temaAtual = localStorage.getItem('tema') || 'dark';
+        aplicarTema(temaAtual);
+        btnTema.addEventListener('click', () => {
+            temaAtual = temaAtual === 'light' ? 'dark' : 'light';
+            localStorage.setItem('tema', temaAtual);
+            aplicarTema(temaAtual);
+        });
 
         // ===== Sincronização com a nuvem (JSONBin.io) =====
         // Estratégia: bin "manifesto" guarda só { chunkIds: [...] }.
@@ -721,8 +799,51 @@
         // Guarda qual variação está sendo exibida por acorde (persiste enquanto o painel está aberto)
         let variacaoSelecionada = {};
 
+        // ===== Função harmônica (grau/intervalo do acorde em relação ao tom) =====
+        // Notação por qualidade de intervalo: J=justa, M=maior, m=menor, A=aumentada
+        const FUNCOES_INTERVALO = ['1', '2m', '2M', '3m', '3M', '4J', '4A', '5J', '6m', '6M', '7m', '7M'];
+
+        function indiceNota(nota) {
+            let idx = NOTAS_SUSTENIDO.indexOf(nota);
+            if (idx === -1) idx = NOTAS_BEMOL.indexOf(nota);
+            return idx;
+        }
+
+        function funcaoAcorde(notaTonica, notaAcorde) {
+            const idxTonica = indiceNota(notaTonica);
+            const idxAcorde = indiceNota(notaAcorde);
+            if (idxTonica === -1 || idxAcorde === -1) return '';
+            const semitons = (idxAcorde - idxTonica + 12) % 12;
+            return FUNCOES_INTERVALO[semitons];
+        }
+
+        // Tom escolhido por música (persistido por título da cifra)
+        let tonsEscolhidos = JSON.parse(localStorage.getItem('tonsEscolhidos') || '{}');
+
+        function obterTomAtual(cifra, tokens, semitons) {
+            const titulo = cifra.titulo;
+            if (tonsEscolhidos[titulo]) return tonsEscolhidos[titulo];
+            // sem escolha salva: chuta o primeiro acorde detectado (já transposto) como tônica
+            if (tokens.length > 0) {
+                const info = parseChordFull(tokens[0]);
+                if (info) {
+                    return semitons !== 0 ? transporChord(info.nota, semitons) : info.nota;
+                }
+            }
+            return 'C';
+        }
+
         function renderizarPainelAcordes(texto, semitons) {
+            const cifraEscolhida = banco[cifraSelector.value];
             const tokens = extrairAcordesUnicos(texto);
+            const tomAtual = cifraEscolhida ? obterTomAtual(cifraEscolhida, tokens, semitons) : 'C';
+
+            let selectorHtml = `<div id="tomSelectorBox">Tom:
+                <select id="tomSelector">
+                    ${NOTAS_SUSTENIDO.map(n => `<option value="${n}" ${n === tomAtual ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+            </div>`;
+
             let html = '';
             tokens.forEach(tok => {
                 const info = parseChordFull(tok);
@@ -730,6 +851,7 @@
                 const notaTransposta = semitons !== 0 ? transporChord(info.nota, semitons) : info.nota;
                 const nomeExibicao = notaTransposta + info.sufixo;
                 const variacoes = getVariacoes(notaTransposta, info.sufixo);
+                const funcao = funcaoAcorde(tomAtual, notaTransposta);
 
                 const chave = tok;
                 if (!(chave in variacaoSelecionada) || variacaoSelecionada[chave] >= variacoes.length) {
@@ -740,7 +862,7 @@
 
                 html += `<div class="chord-diagram-box" data-token="${encodeURIComponent(chave)}">
                     ${svg}
-                    <div style="font-weight:bold;">${nomeExibicao}${sufixoLabel}</div>
+                    <div style="font-weight:bold;">${nomeExibicao}${sufixoLabel}<span class="funcao-label">${funcao}</span></div>
                     <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:2px;">
                         <button class="btn-sm var-prev" style="padding:2px 6px;">◀</button>
                         <span style="font-size:10px;color:#999;min-width:70px;">${variacoes[idxAtual].tipo}</span>
@@ -748,8 +870,18 @@
                     </div>
                 </div>`;
             });
-            chordPanel.innerHTML = html || '<div class="chord-diagram-box">Nenhum acorde detectado</div>';
+            chordPanel.innerHTML = selectorHtml + (html || '<div class="chord-diagram-box">Nenhum acorde detectado</div>');
         }
+
+        // Troca manual do tom (dispara rerender do painel com as novas funções)
+        chordPanel.addEventListener('change', (e) => {
+            if (e.target.id !== 'tomSelector') return;
+            const cifraEscolhida = banco[cifraSelector.value];
+            if (!cifraEscolhida) return;
+            tonsEscolhidos[cifraEscolhida.titulo] = e.target.value;
+            localStorage.setItem('tonsEscolhidos', JSON.stringify(tonsEscolhidos));
+            renderizarPainelAcordes(cifraEscolhida.texto, transposeAtual);
+        });
 
         // Navegação entre variações (delegação de evento)
         chordPanel.addEventListener('click', (e) => {
