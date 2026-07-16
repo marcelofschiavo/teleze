@@ -734,7 +734,7 @@
         let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
         function atualizarUIModoAdmin() {
-            const botoesEdicao = document.querySelectorAll('#btnNovaCifra, #btnEditar, #btnExcluir, #btnSalvarCifra, #btnCancelar');
+            const botoesEdicao = document.querySelectorAll('#btnNovaCifra, #btnEditar, #btnExcluir, #btnSalvarCifra, #btnCancelar, #btnImportarLoteNuvem');
             botoesEdicao.forEach(btn => {
                 btn.style.display = isAdmin ? 'block' : 'none';
             });
