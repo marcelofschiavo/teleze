@@ -527,10 +527,51 @@
             border: 1px solid #17a2b8;
             font-weight: bold;
         }
+        /* Overlay de Sincronização (Loading) */
+        #syncOverlay {
+            display: none; /* Escondido por padrão */
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px); /* Efeito de vidro embaçado lindo */
+            z-index: 9999; /* Fica acima de TUDO, travando a interface */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #syncOverlay.show {
+            display: flex;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.2);
+            border-top: 5px solid var(--chord-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div id="focusMarker"></div>
+    <div id="syncOverlay">
+        <div class="spinner"></div>
+        <div id="syncOverlayText">Aguarde, carregando as cifras...</div>
+    </div>
 
     <div id="tapFlash">Pausado (toque na tela)</div>
 
@@ -880,10 +921,23 @@ fileInputLote.addEventListener('change', (e) => {
             }
         });
 
+        // ===== Controle visual do Overlay de Loading =====
+        const syncOverlay = document.getElementById('syncOverlay');
+        const syncOverlayText = document.getElementById('syncOverlayText');
+
+        function mostrarOverlaySync(texto) {
+            syncOverlayText.textContent = texto;
+            syncOverlay.classList.add('show');
+        }
+
+        function esconderOverlaySync() {
+            syncOverlay.classList.remove('show');
+        }
+
+        // ===== Funções de Nuvem Atualizadas =====
         async function carregarNuvem() {
             if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) {
-                statusMsg('☁️ Nuvem não configurada — usando apenas cópia local. Clique em "⚙️ Nuvem" pra ativar sincronização automática.', '#e0a800');
-                // primeira vez sem nada salvo: tenta puxar um repertorio.json estático, se existir
+                statusMsg('☁️ Nuvem não configurada — usando apenas cópia local.', '#e0a800');
                 if (banco.length === 0) {
                     try {
                         const resp = await fetch('repertorio.json', { cache: 'no-store' });
@@ -899,7 +953,11 @@ fileInputLote.addEventListener('change', (e) => {
                 renderizarLista();
                 return;
             }
+            
+            // TRAVA A TELA AQUI
+            mostrarOverlaySync('Aguarde, baixando seu acervo da nuvem...'); 
             statusMsg('⏳ Sincronizando...', '#aaa');
+            
             try {
                 const manifesto = await jsonbinGet(cloudConfig.manifestId, cloudConfig.apiKey);
                 const chunkIds = (manifesto && Array.isArray(manifesto.chunkIds)) ? manifesto.chunkIds : [];
@@ -914,18 +972,23 @@ fileInputLote.addEventListener('change', (e) => {
             } catch (e) {
                 console.error('carregarNuvem erro:', e);
                 statusMsg('⚠️ Sem conexão com a nuvem — mostrando última cópia salva neste aparelho', '#dc3545');
+            } finally {
+                // LIBERA A TELA SEMPRE (até se der erro)
+                esconderOverlaySync(); 
             }
             renderizarLista();
         }
 
-        // Substitua a função salvarNuvem() atual por esta:
         async function salvarNuvem() {
             localStorage.setItem('bancoCache', JSON.stringify(banco));
             if (!cloudConfig || !cloudConfig.manifestId || !cloudConfig.apiKey) return;
             
-            if (isSyncing) return; // Trava contra Race Condition (cliques duplos)
+            if (isSyncing) return; // Trava contra Race Condition
             isSyncing = true;
             setBotoesBloqueados(true);
+            
+            // TRAVA A TELA AQUI
+            mostrarOverlaySync('Salvando alterações na nuvem...');
             statusMsg('⏳ Salvando na nuvem...', '#aaa');
             
             try {
@@ -943,7 +1006,7 @@ fileInputLote.addEventListener('change', (e) => {
                         novosIds.push(novoId);
                     }
                 }
-                // Apaga bins de pedaço que sobraram (acervo encolheu)
+                
                 for (let i = novosChunks.length; i < chunkIdsAntigos.length; i++) {
                     await jsonbinDelete(chunkIdsAntigos[i], cloudConfig.apiKey);
                 }
@@ -956,6 +1019,8 @@ fileInputLote.addEventListener('change', (e) => {
             } finally {
                 isSyncing = false;
                 setBotoesBloqueados(false);
+                // LIBERA A TELA
+                esconderOverlaySync();
             }
         }
 
