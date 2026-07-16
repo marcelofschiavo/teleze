@@ -462,6 +462,19 @@
             color: var(--text-muted);
         }
 
+        .stepper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.stepper span {
+    min-width: 24px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text);
+}
+
         input[type=range] { width: 80px; height: 16px; }
 
         #wakeStatus {
@@ -678,16 +691,26 @@
     </div>
 
     <div id="controls">
-        <button id="toggleBtn">Iniciar</button>
-        <div class="control-group">
-            <label>Velocidade</label>
-            <input type="range" id="speed" min="1" max="100" value="15">
-        </div>
-        <div class="control-group">
-            <label>Tam. Letra</label>
-            <input type="range" id="fontSize" min="8" max="80" value="24">
+    <button id="toggleBtn">Iniciar</button>
+    <div class="control-group">
+        <label>Velocidade</label>
+        <div class="stepper">
+            <button type="button" id="btnSpeedDown" class="btn-sm btn-zoom">−</button>
+            <span id="speedValue">15</span>
+            <button type="button" id="btnSpeedUp" class="btn-sm btn-zoom">+</button>
         </div>
     </div>
+    <div class="control-group">
+        <label>Tam. Letra</label>
+        <div class="stepper">
+            <button type="button" id="btnFontDown" class="btn-sm btn-zoom">−</button>
+            <span id="fontSizeValue">24</span>
+            <button type="button" id="btnFontUp" class="btn-sm btn-zoom">+</button>
+        </div>
+    </div>
+    <input type="range" id="speed" min="1" max="100" value="15" style="display:none;">
+    <input type="range" id="fontSize" min="8" max="80" value="24" style="display:none;">
+</div>
     <div id="wakeStatus"></div>
 
     <script>
@@ -763,10 +786,48 @@
         const tapFlash = document.getElementById('tapFlash');
         const wakeStatus = document.getElementById('wakeStatus');
 
+        const speedValue = document.getElementById('speedValue');
+const fontSizeValue = document.getElementById('fontSizeValue');
+const btnSpeedUp = document.getElementById('btnSpeedUp');
+const btnSpeedDown = document.getElementById('btnSpeedDown');
+const btnFontUp = document.getElementById('btnFontUp');
+const btnFontDown = document.getElementById('btnFontDown');
+
+function atualizarSpeedDisplay() {
+    speedValue.textContent = speedInput.value;
+}
+function atualizarFontDisplay() {
+    fontSizeValue.textContent = fontSizeInput.value;
+}
+
+btnSpeedUp.addEventListener('click', () => {
+    speedInput.value = Math.min(100, parseInt(speedInput.value) + 5);
+    atualizarSpeedDisplay();
+    speedInput.dispatchEvent(new Event('input'));
+});
+btnSpeedDown.addEventListener('click', () => {
+    speedInput.value = Math.max(1, parseInt(speedInput.value) - 5);
+    atualizarSpeedDisplay();
+    speedInput.dispatchEvent(new Event('input'));
+});
+
+btnFontUp.addEventListener('click', () => {
+    fontSizeInput.value = Math.min(80, parseInt(fontSizeInput.value) + 2);
+    atualizarFontDisplay();
+    fontSizeInput.dispatchEvent(new Event('input'));
+});
+btnFontDown.addEventListener('click', () => {
+    fontSizeInput.value = Math.max(8, parseInt(fontSizeInput.value) - 2);
+    atualizarFontDisplay();
+    fontSizeInput.dispatchEvent(new Event('input'));
+});
+
+atualizarSpeedDisplay();
+atualizarFontDisplay();
 
         // Chame isso logo após o carregamento da página
         atualizarUIModoAdmin();
-        
+
         let isPlaying = false;
         let animationId;
         let wakeLock = null;
