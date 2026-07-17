@@ -708,8 +708,19 @@
             <button type="button" id="btnFontUp" class="btn-sm btn-zoom">+</button>
         </div>
     </div>
+    <!-- NOVO CONTROLE DO PEDAL AQUI -->
+    <div class="control-group">
+        <label>Pedal</label>
+        <div class="stepper">
+            <button type="button" id="btnPedalDown" class="btn-sm btn-zoom">−</button>
+            <span id="pedalValue">10 L</span>
+            <button type="button" id="btnPedalUp" class="btn-sm btn-zoom">+</button>
+        </div>
+    </div>
     <input type="range" id="speed" min="1" max="100" value="15" style="display:none;">
     <input type="range" id="fontSize" min="8" max="80" value="24" style="display:none;">
+    <!-- Input oculto para guardar o valor do pedal -->
+    <input type="range" id="pedalStep" min="1" max="40" step="1" value="10" style="display:none;">
 </div>
     <div id="wakeStatus"></div>
 
@@ -824,6 +835,69 @@ btnFontDown.addEventListener('click', () => {
 
 atualizarSpeedDisplay();
 atualizarFontDisplay();
+
+// ==========================================
+// --- LÓGICA DO BOTÃO DO PEDAL ---
+const pedalStepInput = document.getElementById('pedalStep');
+const pedalValue = document.getElementById('pedalValue');
+const btnPedalUp = document.getElementById('btnPedalUp');
+const btnPedalDown = document.getElementById('btnPedalDown');
+
+function atualizarPedalDisplay() {
+    pedalValue.textContent = pedalStepInput.value + ' L';
+}
+
+// Carrega a preferência salva anteriormente, se existir
+if (localStorage.getItem('pedalStep')) {
+    pedalStepInput.value = localStorage.getItem('pedalStep');
+}
+atualizarPedalDisplay();
+
+btnPedalUp.addEventListener('click', () => {
+    pedalStepInput.value = Math.min(40, parseInt(pedalStepInput.value) + 1);
+    atualizarPedalDisplay();
+    localStorage.setItem('pedalStep', pedalStepInput.value);
+});
+
+btnPedalDown.addEventListener('click', () => {
+    pedalStepInput.value = Math.max(1, parseInt(pedalStepInput.value) - 1);
+    atualizarPedalDisplay();
+    localStorage.setItem('pedalStep', pedalStepInput.value);
+});
+
+// --- INTERCEPTADOR DO PEDAL M-VAVE ---
+window.addEventListener('keydown', (e) => {
+    // Teclas comuns enviadas por pedais bluetooth
+    const teclasDescida = ['PageDown', 'ArrowDown', 'ArrowRight'];
+    const teclasSubida = ['PageUp', 'ArrowUp', 'ArrowLeft'];
+
+    // Se o usuário estiver digitando em algum campo, não fazemos nada
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (teclasDescida.includes(e.key) || teclasSubida.includes(e.key)) {
+        e.preventDefault(); // Impede a rolagem seca padrão do navegador
+
+        // Pega o tamanho atual da fonte escolhida no controle
+        const tamanhoFonte = parseInt(document.getElementById('fontSize').value) || 24;
+
+        // A altura de 1 linha é o tamanho da fonte * 1.4 (baseado no CSS)
+        const alturaLinha = tamanhoFonte * 1.4;
+
+        // Calcula os pixels totais multiplicando pelas linhas configuradas
+        const qtdLinhas = parseInt(pedalStepInput.value);
+        const pixelsParaRolar = qtdLinhas * alturaLinha;
+
+        // Define a direção (positivo para baixo, negativo para cima)
+        const direcao = teclasDescida.includes(e.key) ? 1 : -1;
+
+        // Aplica a rolagem (mude 'smooth' para 'auto' se quiser um pulo instantâneo sem animação)
+        window.scrollBy({
+            top: direcao * pixelsParaRolar,
+            behavior: 'smooth'
+        });
+    }
+});
+// ==========================================
 
         // Chame isso logo após o carregamento da página
         atualizarUIModoAdmin();
